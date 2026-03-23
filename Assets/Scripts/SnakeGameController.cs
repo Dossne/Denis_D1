@@ -32,6 +32,11 @@ public sealed class SnakeGameController : MonoBehaviour
     private const float MaxInteriorWallCoverage = 0.20f;
     private const int MinInteriorWallLength = 2;
     private const int MaxInteriorWallLength = 7;
+    private const int BugStartLevel = 3;
+    private const int BugMaxActive = 3;
+    private const float BugBaseSpawnInterval = 10f;
+    private const float BugMinSpawnInterval = 5f;
+    private const float BugSpawnStepPerLevel = 0.5f;
 
     private const float GameplayViewportBottom = 0.24f;
     private const float GameplayViewportHeight = 0.62f;
@@ -43,6 +48,7 @@ public sealed class SnakeGameController : MonoBehaviour
     private static Sprite snakeHeadOpenFallbackSprite;
     private static Sprite snakeHeadClosedFallbackSprite;
     private static Sprite snakeBodyFallbackSprite;
+    private static Sprite bugFallbackSprite;
 
     private readonly List<Vector2Int> snakeSegments = new List<Vector2Int>();
     private readonly List<SnakeSegmentView> snakeViews = new List<SnakeSegmentView>();
@@ -50,6 +56,7 @@ public sealed class SnakeGameController : MonoBehaviour
     private readonly List<GameObject> wallObjects = new List<GameObject>();
     private readonly HashSet<Vector2Int> interiorWallCells = new HashSet<Vector2Int>();
     private readonly List<GameObject> interiorWallObjects = new List<GameObject>();
+    private readonly List<BugView> bugViews = new List<BugView>();
 
     private readonly System.Random random = new System.Random();
     private Font wallEmojiFont;
@@ -58,6 +65,7 @@ public sealed class SnakeGameController : MonoBehaviour
     private Transform wallRoot;
     private Transform snakeRoot;
     private Transform appleRoot;
+    private Transform bugRoot;
 
     private Camera mainCamera;
     private Camera backgroundCamera;
@@ -74,6 +82,9 @@ public sealed class SnakeGameController : MonoBehaviour
     private float moveInterval;
     private float moveTimer;
     private float timeRemaining;
+    private float bugSpawnInterval;
+    private float bugSpawnTimer;
+    private float bugMoveSpeed;
     private string statusMessage = string.Empty;
 
     public SnakeGameState State => state;
@@ -87,6 +98,13 @@ public sealed class SnakeGameController : MonoBehaviour
     {
         public GameObject Root;
         public SpriteRenderer FallbackRenderer;
+        public TextMesh EmojiText;
+        public MeshRenderer EmojiRenderer;
+    }
+
+    private sealed class BugView
+    {
+        public GameObject Root;
         public TextMesh EmojiText;
         public MeshRenderer EmojiRenderer;
     }
@@ -142,6 +160,12 @@ public sealed class SnakeGameController : MonoBehaviour
         }
 
         HandleKeyboardInput();
+        UpdateBugs(Time.deltaTime);
+        if (state != SnakeGameState.Playing)
+        {
+            UpdateSnakeHeadVisual();
+            return;
+        }
 
         timeRemaining -= Time.deltaTime;
         if (timeRemaining <= 0f)
@@ -224,6 +248,130 @@ public sealed class SnakeGameController : MonoBehaviour
         ClearInteriorWalls();
         GenerateInteriorWalls(currentLevel);
         SpawnApples(applesTarget);
+        InitializeBugSystem(currentLevel, moveInterval);
+    }
+
+    private void InitializeBugSystem(int level, float levelStartMoveInterval)
+    {
+        ClearBugs();
+
+        if (level < BugStartLevel || levelStartMoveInterval <= 0f)
+        {
+            bugSpawnInterval = float.PositiveInfinity;
+            bugSpawnTimer = float.PositiveInfinity;
+            bugMoveSpeed = 0f;
+            return;
+        }
+
+        bugSpawnInterval = Mathf.Max(BugMinSpawnInterval, BugBaseSpawnInterval - (level - BugStartLevel) * BugSpawnStepPerLevel);
+        bugSpawnTimer = bugSpawnInterval;
+        bugMoveSpeed = 1f / levelStartMoveInterval;
+    }
+
+    private void UpdateBugs(float deltaTime)
+    {
+        if (currentLevel < BugStartLevel || bugMoveSpeed <= 0f)
+        {
+            return;
+        }
+
+        for (int i = bugViews.Count - 1; i >= 0; i--)
+        {
+            BugView bug = bugViews[i];
+            if (bug == null || bug.Root == null)
+            {
+                bugViews.RemoveAt(i);
+                continue;
+            }
+
+            Vector3 position = bug.Root.transform.localPosition;
+            position.y -= bugMoveSpeed * deltaTime;
+            bug.Root.transform.localPosition = position;
+
+            if (position.y < MinY - 0.75f)
+            {
+                RemoveBugAt(i);
+            }
+        }
+
+        if (snakeSegments.Count > 0 && IsHeadCollidingWithBug(snakeSegments[0]))
+        {
+            LoseLevel("You hit a bug");
+            return;
+        }
+
+        bugSpawnTimer -= deltaTime;
+        while (bugSpawnTimer <= 0f)
+        {
+            bugSpawnTimer += bugSpawnInterval;
+            if (bugViews.Count < BugMaxActive)
+            {
+                SpawnBug();
+            }
+        }
+    }
+
+    private void SpawnBug()
+    {
+        if (bugRoot == null)
+        {
+            return;
+        }
+
+        int x = random.Next(MinX + 1, MaxX);
+        BugView bug = CreateBugView(new Vector3(x, MaxY, 0f));
+        bugViews.Add(bug);
+    }
+
+    private bool IsHeadCollidingWithBug(Vector2Int headCell)
+    {
+        for (int i = 0; i < bugViews.Count; i++)
+        {
+            BugView bug = bugViews[i];
+            if (bug == null || bug.Root == null)
+            {
+                continue;
+            }
+
+            Vector3 position = bug.Root.transform.localPosition;
+            var bugCell = new Vector2Int(Mathf.RoundToInt(position.x), Mathf.RoundToInt(position.y));
+            if (bugCell == headCell)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private void RemoveBugAt(int index)
+    {
+        if (index < 0 || index >= bugViews.Count)
+        {
+            return;
+        }
+
+        BugView bug = bugViews[index];
+        bugViews.RemoveAt(index);
+
+        if (bug != null && bug.Root != null)
+        {
+            Destroy(bug.Root);
+        }
+    }
+
+    private void ClearBugs()
+    {
+        for (int i = 0; i < bugViews.Count; i++)
+        {
+            BugView bug = bugViews[i];
+            if (bug != null && bug.Root != null)
+            {
+                Destroy(bug.Root);
+            }
+        }
+
+        bugViews.Clear();
     }
     private int CalculateApplesCount(int level)
     {
@@ -377,6 +525,12 @@ public sealed class SnakeGameController : MonoBehaviour
             return;
         }
 
+        if (IsHeadCollidingWithBug(nextHead))
+        {
+            LoseLevel("You hit a bug");
+            return;
+        }
+
         bool willEatApple = appleObjects.ContainsKey(nextHead);
         int tailIndex = snakeSegments.Count - 1;
 
@@ -412,7 +566,6 @@ public sealed class SnakeGameController : MonoBehaviour
             WinLevel();
         }
     }
-
     private void EatApple(Vector2Int appleCell)
     {
         if (appleObjects.TryGetValue(appleCell, out var appleObject) && appleObject != null)
@@ -603,8 +756,10 @@ public sealed class SnakeGameController : MonoBehaviour
 
         snakeRoot = new GameObject("Snake").transform;
         snakeRoot.SetParent(worldRoot);
-    }
 
+        bugRoot = new GameObject("Bugs").transform;
+        bugRoot.SetParent(worldRoot);
+    }
     private void BuildWalls()
     {
         foreach (var wallObject in wallObjects)
@@ -847,6 +1002,114 @@ public sealed class SnakeGameController : MonoBehaviour
 
         targetList?.Add(wallObject);
         return wallObject;
+    }
+
+    private BugView CreateBugView(Vector3 localPosition)
+    {
+        var bugObject = new GameObject("Bug");
+        bugObject.transform.SetParent(bugRoot, false);
+        bugObject.transform.localPosition = localPosition;
+
+        var fallbackRenderer = bugObject.AddComponent<SpriteRenderer>();
+        fallbackRenderer.sprite = GetBugFallbackSprite();
+        fallbackRenderer.color = Color.white;
+        fallbackRenderer.sortingOrder = 7;
+
+        var emojiObject = new GameObject("Emoji");
+        emojiObject.transform.SetParent(bugObject.transform, false);
+        emojiObject.transform.localPosition = new Vector3(0f, 0f, -0.05f);
+
+        var textMesh = emojiObject.AddComponent<TextMesh>();
+        textMesh.text = "\uD83D\uDC1B";
+        textMesh.anchor = TextAnchor.MiddleCenter;
+        textMesh.alignment = TextAlignment.Center;
+        textMesh.characterSize = 0.24f;
+        textMesh.fontSize = 96;
+        textMesh.color = Color.white;
+        textMesh.richText = false;
+
+        Font emojiFont = GetWallEmojiFont();
+        if (emojiFont != null)
+        {
+            textMesh.font = emojiFont;
+        }
+
+        MeshRenderer emojiRenderer = emojiObject.GetComponent<MeshRenderer>();
+        if (emojiRenderer != null)
+        {
+            if (emojiFont != null)
+            {
+                emojiRenderer.material = emojiFont.material;
+            }
+
+            emojiRenderer.sortingOrder = 8;
+        }
+
+        return new BugView
+        {
+            Root = bugObject,
+            EmojiText = textMesh,
+            EmojiRenderer = emojiRenderer
+        };
+    }
+
+    private static Sprite GetBugFallbackSprite()
+    {
+        if (bugFallbackSprite != null)
+        {
+            return bugFallbackSprite;
+        }
+
+        const int textureSize = 16;
+        var texture = new Texture2D(textureSize, textureSize, TextureFormat.RGBA32, false);
+        texture.filterMode = FilterMode.Point;
+        texture.wrapMode = TextureWrapMode.Clamp;
+
+        var transparent = new Color32(0, 0, 0, 0);
+        var bodyColor = new Color32(83, 56, 138, 255);
+        var wingColor = new Color32(130, 87, 198, 255);
+        var eyeColor = new Color32(241, 245, 250, 255);
+        var pupilColor = new Color32(30, 38, 52, 255);
+
+        var pixels = new Color32[textureSize * textureSize];
+        for (int i = 0; i < pixels.Length; i++)
+        {
+            pixels[i] = transparent;
+        }
+
+        for (int y = 3; y <= 12; y++)
+        {
+            for (int x = 4; x <= 11; x++)
+            {
+                float dx = (x - 7.5f) / 4.0f;
+                float dy = (y - 7.5f) / 5.0f;
+                if (dx * dx + dy * dy > 1f)
+                {
+                    continue;
+                }
+
+                pixels[y * textureSize + x] = x <= 7 ? wingColor : bodyColor;
+            }
+        }
+
+        pixels[11 * textureSize + 6] = eyeColor;
+        pixels[11 * textureSize + 9] = eyeColor;
+        pixels[11 * textureSize + 7] = pupilColor;
+        pixels[11 * textureSize + 8] = pupilColor;
+
+        for (int x = 6; x <= 9; x++)
+        {
+            pixels[13 * textureSize + x] = bodyColor;
+        }
+
+        pixels[14 * textureSize + 7] = bodyColor;
+        pixels[14 * textureSize + 8] = bodyColor;
+
+        texture.SetPixels32(pixels);
+        texture.Apply();
+
+        bugFallbackSprite = Sprite.Create(texture, new Rect(0f, 0f, textureSize, textureSize), new Vector2(0.5f, 0.5f), textureSize);
+        return bugFallbackSprite;
     }
     private Font GetWallEmojiFont()
     {
