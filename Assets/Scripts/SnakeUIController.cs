@@ -4,11 +4,12 @@ using UnityEngine.UI;
 
 public sealed class SnakeUIController : MonoBehaviour
 {
+    private static SnakeUIController instance;
+
     private SnakeGameController gameController;
     private Font uiFont;
 
     private RectTransform canvasRect;
-    private RectTransform playAreaFrame;
     private RectTransform controlsRoot;
 
     private Text levelText;
@@ -23,9 +24,18 @@ public sealed class SnakeUIController : MonoBehaviour
     private Rect lastViewport = new Rect(-1f, -1f, -1f, -1f);
     private string lastLevelLine = string.Empty;
     private string lastTimerLine = string.Empty;
+    private string lastStatusLine = string.Empty;
 
     private void Awake()
     {
+        if (instance != null && instance != this)
+        {
+            Destroy(gameObject);
+            return;
+        }
+
+        instance = this;
+
         gameController = GetComponent<SnakeGameController>();
         if (gameController == null)
         {
@@ -39,11 +49,26 @@ public sealed class SnakeUIController : MonoBehaviour
             return;
         }
 
-        uiFont = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        uiFont = CreateUiFont();
+        if (uiFont == null)
+        {
+            Debug.LogError("SnakeUIController could not initialize UI font.");
+            enabled = false;
+            return;
+        }
 
         EnsureEventSystem();
         BuildUi();
         ApplyLayoutFromViewport(true);
+        UpdateHud();
+    }
+
+    private void OnDestroy()
+    {
+        if (instance == this)
+        {
+            instance = null;
+        }
     }
 
     private void Update()
@@ -56,6 +81,27 @@ public sealed class SnakeUIController : MonoBehaviour
         ApplyLayoutFromViewport(false);
         UpdateHud();
         UpdateStateControls();
+    }
+
+    private Font CreateUiFont()
+    {
+        string[] preferredFontNames =
+        {
+            "Segoe UI",
+            "Arial",
+            "Tahoma",
+            "Verdana",
+            "Noto Sans",
+            "Liberation Sans"
+        };
+
+        Font font = Font.CreateDynamicFontFromOSFont(preferredFontNames, 32);
+        if (font != null)
+        {
+            return font;
+        }
+
+        return Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
     }
 
     private void EnsureEventSystem()
@@ -77,7 +123,7 @@ public sealed class SnakeUIController : MonoBehaviour
 
         var canvas = canvasObject.GetComponent<Canvas>();
         canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-        canvas.pixelPerfect = true;
+        canvas.pixelPerfect = false;
 
         var scaler = canvasObject.GetComponent<CanvasScaler>();
         scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
@@ -86,18 +132,9 @@ public sealed class SnakeUIController : MonoBehaviour
 
         canvasRect = canvasObject.GetComponent<RectTransform>();
 
-        var playAreaFrameObject = new GameObject("PlayAreaFrame", typeof(RectTransform), typeof(Image));
-        playAreaFrameObject.transform.SetParent(canvasRect, false);
-        playAreaFrame = playAreaFrameObject.GetComponent<RectTransform>();
-
-        var playAreaImage = playAreaFrameObject.GetComponent<Image>();
-        playAreaImage.color = new Color32(24, 38, 55, 100);
-        playAreaFrame.SetAsFirstSibling();
-
-        levelText = CreateText("LevelText", canvasRect, 34, TextAnchor.MiddleCenter);
-        timerText = CreateText("TimerText", canvasRect, 30, TextAnchor.MiddleCenter);
-
-        statusText = CreateText("StatusText", canvasRect, 44, TextAnchor.MiddleCenter);
+        levelText = CreateText("LevelText", canvasRect, 36, TextAnchor.MiddleCenter);
+        timerText = CreateText("TimerText", canvasRect, 32, TextAnchor.MiddleCenter);
+        statusText = CreateText("StatusText", canvasRect, 46, TextAnchor.MiddleCenter);
 
         actionButton = CreateButton("ActionButton", canvasRect, out actionButtonText);
         actionButtonRect = actionButton.GetComponent<RectTransform>();
@@ -105,10 +142,10 @@ public sealed class SnakeUIController : MonoBehaviour
 
         controlsRoot = CreateRectTransform("DirectionControls", canvasRect);
 
-        CreateDirectionButton(controlsRoot, "UpButton", "UP", new Vector2(0f, 90f), gameController.QueueUp);
-        CreateDirectionButton(controlsRoot, "DownButton", "DOWN", new Vector2(0f, -90f), gameController.QueueDown);
-        CreateDirectionButton(controlsRoot, "LeftButton", "LEFT", new Vector2(-95f, 0f), gameController.QueueLeft);
-        CreateDirectionButton(controlsRoot, "RightButton", "RIGHT", new Vector2(95f, 0f), gameController.QueueRight);
+        CreateDirectionButton(controlsRoot, "UpButton", "UP", new Vector2(0f, 100f), gameController.QueueUp);
+        CreateDirectionButton(controlsRoot, "DownButton", "DOWN", new Vector2(0f, -100f), gameController.QueueDown);
+        CreateDirectionButton(controlsRoot, "LeftButton", "LEFT", new Vector2(-115f, 0f), gameController.QueueLeft);
+        CreateDirectionButton(controlsRoot, "RightButton", "RIGHT", new Vector2(115f, 0f), gameController.QueueRight);
     }
 
     private void ApplyLayoutFromViewport(bool force)
@@ -131,20 +168,18 @@ public sealed class SnakeUIController : MonoBehaviour
         float centerX = Mathf.Clamp01(viewport.center.x);
         float centerY = Mathf.Clamp01(viewport.center.y);
 
-        SetRect(playAreaFrame, new Vector2(viewport.xMin, viewport.yMin), new Vector2(viewport.xMax, viewport.yMax), new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
+        SetRect(levelText.rectTransform, new Vector2(centerX, Mathf.Clamp01(topY + 0.055f)), new Vector2(centerX, Mathf.Clamp01(topY + 0.055f)), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(840f, 84f));
+        SetRect(timerText.rectTransform, new Vector2(centerX, Mathf.Clamp01(topY + 0.02f)), new Vector2(centerX, Mathf.Clamp01(topY + 0.02f)), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(520f, 72f));
 
-        SetRect(levelText.rectTransform, new Vector2(centerX, Mathf.Clamp01(topY + 0.05f)), new Vector2(centerX, Mathf.Clamp01(topY + 0.05f)), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(780f, 80f));
-        SetRect(timerText.rectTransform, new Vector2(centerX, Mathf.Clamp01(topY + 0.015f)), new Vector2(centerX, Mathf.Clamp01(topY + 0.015f)), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(420f, 70f));
-
-        SetRect(statusText.rectTransform, new Vector2(centerX, Mathf.Clamp01(centerY + 0.08f)), new Vector2(centerX, Mathf.Clamp01(centerY + 0.08f)), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(700f, 120f));
+        SetRect(statusText.rectTransform, new Vector2(centerX, Mathf.Clamp01(centerY + 0.09f)), new Vector2(centerX, Mathf.Clamp01(centerY + 0.09f)), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(760f, 120f));
 
         SetRect(actionButtonRect, new Vector2(centerX, centerY), new Vector2(centerX, centerY), new Vector2(0.5f, 0.5f), new Vector2(0f, -10f), new Vector2(380f, 110f));
 
-        float controlsY = Mathf.Clamp01(bottomY - 0.12f);
-        SetRect(controlsRoot, new Vector2(centerX, controlsY), new Vector2(centerX, controlsY), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(360f, 280f));
+        float controlsY = Mathf.Clamp01(bottomY - 0.13f);
+        SetRect(controlsRoot, new Vector2(centerX, controlsY), new Vector2(centerX, controlsY), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(420f, 320f));
     }
 
-    private bool IsSameViewport(Rect previous, Rect current)
+    private static bool IsSameViewport(Rect previous, Rect current)
     {
         const float epsilon = 0.001f;
 
@@ -172,13 +207,11 @@ public sealed class SnakeUIController : MonoBehaviour
             timerText.text = timerLine;
         }
 
-        if (gameController.State == SnakeGameState.Playing)
+        string statusLine = gameController.State == SnakeGameState.Playing ? string.Empty : gameController.StatusMessage;
+        if (!string.Equals(lastStatusLine, statusLine))
         {
-            statusText.text = string.Empty;
-        }
-        else
-        {
-            statusText.text = gameController.StatusMessage;
+            lastStatusLine = statusLine;
+            statusText.text = statusLine;
         }
     }
 
@@ -218,7 +251,7 @@ public sealed class SnakeUIController : MonoBehaviour
         button.onClick.AddListener(onClick);
 
         RectTransform rect = button.GetComponent<RectTransform>();
-        SetRect(rect, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), anchoredPosition, new Vector2(120f, 80f));
+        SetRect(rect, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), anchoredPosition, new Vector2(140f, 86f));
     }
 
     private Button CreateButton(string name, Transform parent, out Text label)
@@ -227,25 +260,21 @@ public sealed class SnakeUIController : MonoBehaviour
         buttonObject.transform.SetParent(parent, false);
 
         var image = buttonObject.GetComponent<Image>();
-        image.color = new Color32(40, 58, 78, 230);
+        image.color = new Color32(8, 12, 30, 230);
 
         var button = buttonObject.GetComponent<Button>();
         ColorBlock colors = button.colors;
-        colors.normalColor = new Color32(40, 58, 78, 230);
-        colors.highlightedColor = new Color32(58, 83, 109, 255);
-        colors.pressedColor = new Color32(84, 122, 156, 255);
+        colors.normalColor = new Color32(8, 12, 30, 230);
+        colors.highlightedColor = new Color32(20, 30, 58, 255);
+        colors.pressedColor = new Color32(30, 44, 77, 255);
         colors.selectedColor = colors.highlightedColor;
-        colors.disabledColor = new Color32(26, 35, 47, 180);
+        colors.disabledColor = new Color32(8, 12, 30, 180);
         button.colors = colors;
 
         var textObject = new GameObject("Label", typeof(RectTransform), typeof(Text));
         textObject.transform.SetParent(buttonObject.transform, false);
         label = textObject.GetComponent<Text>();
-        label.font = uiFont;
-        label.fontSize = 30;
-        label.alignment = TextAnchor.MiddleCenter;
-        label.color = new Color32(224, 235, 245, 255);
-        label.text = string.Empty;
+        ConfigureTextStyle(label, 34, TextAnchor.MiddleCenter, new Color32(229, 238, 245, 255));
 
         RectTransform textRect = label.rectTransform;
         textRect.anchorMin = Vector2.zero;
@@ -262,13 +291,24 @@ public sealed class SnakeUIController : MonoBehaviour
         textObject.transform.SetParent(parent, false);
 
         var text = textObject.GetComponent<Text>();
+        ConfigureTextStyle(text, fontSize, alignment, new Color32(231, 240, 247, 255));
+
+        return text;
+    }
+
+    private void ConfigureTextStyle(Text text, int fontSize, TextAnchor alignment, Color color)
+    {
         text.font = uiFont;
         text.fontSize = fontSize;
         text.alignment = alignment;
-        text.color = new Color32(224, 235, 245, 255);
+        text.color = color;
+        text.supportRichText = false;
+        text.resizeTextForBestFit = false;
+        text.horizontalOverflow = HorizontalWrapMode.Overflow;
+        text.verticalOverflow = VerticalWrapMode.Overflow;
+        text.alignByGeometry = true;
+        text.raycastTarget = false;
         text.text = string.Empty;
-
-        return text;
     }
 
     private RectTransform CreateRectTransform(string name, Transform parent)
@@ -278,7 +318,7 @@ public sealed class SnakeUIController : MonoBehaviour
         return objectWithRect.GetComponent<RectTransform>();
     }
 
-    private void SetRect(RectTransform rect, Vector2 anchorMin, Vector2 anchorMax, Vector2 pivot, Vector2 anchoredPosition, Vector2 size)
+    private static void SetRect(RectTransform rect, Vector2 anchorMin, Vector2 anchorMax, Vector2 pivot, Vector2 anchoredPosition, Vector2 size)
     {
         rect.anchorMin = anchorMin;
         rect.anchorMax = anchorMax;
@@ -287,4 +327,3 @@ public sealed class SnakeUIController : MonoBehaviour
         rect.sizeDelta = size;
     }
 }
-
