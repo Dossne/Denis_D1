@@ -294,7 +294,7 @@ public sealed class SnakeGameController : MonoBehaviour
             emojiRenderer.sortingOrder = 6;
         }
 
-        fallbackRenderer.enabled = !canRenderEmoji;
+        fallbackRenderer.enabled = true;
 
         return appleObject;
     }
@@ -731,3 +731,4 @@ public sealed class SnakeGameController : MonoBehaviour
         return pixelSprite;
     }
 }
+
