@@ -28,6 +28,7 @@ public sealed class SnakeGameController : MonoBehaviour
     private const float GameplayViewportTargetAspect = 0.58f;
 
     private static Sprite pixelSprite;
+    private static Sprite wallFallbackSprite;
 
     private readonly List<Vector2Int> snakeSegments = new List<Vector2Int>();
     private readonly List<SpriteRenderer> snakeRenderers = new List<SpriteRenderer>();
@@ -520,12 +521,21 @@ public sealed class SnakeGameController : MonoBehaviour
         wallObject.transform.SetParent(wallRoot, false);
         wallObject.transform.localPosition = new Vector3(cell.x, cell.y, 0f);
 
-        var textMesh = wallObject.AddComponent<TextMesh>();
+        var fallbackRenderer = wallObject.AddComponent<SpriteRenderer>();
+        fallbackRenderer.sprite = GetWallFallbackSprite();
+        fallbackRenderer.color = Color.white;
+        fallbackRenderer.sortingOrder = 1;
+
+        var emojiObject = new GameObject("Emoji");
+        emojiObject.transform.SetParent(wallObject.transform, false);
+        emojiObject.transform.localPosition = new Vector3(0f, 0f, -0.05f);
+
+        var textMesh = emojiObject.AddComponent<TextMesh>();
         textMesh.text = "\uD83E\uDDF1";
         textMesh.anchor = TextAnchor.MiddleCenter;
         textMesh.alignment = TextAlignment.Center;
-        textMesh.characterSize = 0.24f;
-        textMesh.fontSize = 64;
+        textMesh.characterSize = 0.22f;
+        textMesh.fontSize = 96;
         textMesh.color = Color.white;
         textMesh.richText = false;
 
@@ -533,13 +543,17 @@ public sealed class SnakeGameController : MonoBehaviour
         if (emojiFont != null)
         {
             textMesh.font = emojiFont;
+        }
 
-            MeshRenderer meshRenderer = wallObject.GetComponent<MeshRenderer>();
-            if (meshRenderer != null)
+        MeshRenderer emojiRenderer = emojiObject.GetComponent<MeshRenderer>();
+        if (emojiRenderer != null)
+        {
+            if (emojiFont != null)
             {
-                meshRenderer.material = emojiFont.material;
-                meshRenderer.sortingOrder = 1;
+                emojiRenderer.material = emojiFont.material;
             }
+
+            emojiRenderer.sortingOrder = 2;
         }
 
         wallObjects.Add(wallObject);
@@ -569,6 +583,41 @@ public sealed class SnakeGameController : MonoBehaviour
         return wallEmojiFont;
     }
 
+    private static Sprite GetWallFallbackSprite()
+    {
+        if (wallFallbackSprite != null)
+        {
+            return wallFallbackSprite;
+        }
+
+        const int textureSize = 16;
+        var texture = new Texture2D(textureSize, textureSize, TextureFormat.RGBA32, false);
+        texture.filterMode = FilterMode.Point;
+        texture.wrapMode = TextureWrapMode.Clamp;
+
+        var brickColor = new Color32(177, 95, 70, 255);
+        var mortarColor = new Color32(114, 66, 49, 255);
+        var pixels = new Color32[textureSize * textureSize];
+
+        for (int y = 0; y < textureSize; y++)
+        {
+            for (int x = 0; x < textureSize; x++)
+            {
+                bool horizontalMortar = y == 0 || y == 7 || y == 15;
+                bool topVerticalMortar = y > 7 && x == 8;
+                bool bottomVerticalMortar = y <= 7 && (x == 4 || x == 12);
+                bool isMortar = horizontalMortar || topVerticalMortar || bottomVerticalMortar;
+
+                pixels[y * textureSize + x] = isMortar ? mortarColor : brickColor;
+            }
+        }
+
+        texture.SetPixels32(pixels);
+        texture.Apply();
+
+        wallFallbackSprite = Sprite.Create(texture, new Rect(0f, 0f, textureSize, textureSize), new Vector2(0.5f, 0.5f), textureSize);
+        return wallFallbackSprite;
+    }
     private void SyncSnakeRenderers()
     {
         while (snakeRenderers.Count < snakeSegments.Count)
@@ -636,4 +685,5 @@ public sealed class SnakeGameController : MonoBehaviour
         return pixelSprite;
     }
 }
+
 
