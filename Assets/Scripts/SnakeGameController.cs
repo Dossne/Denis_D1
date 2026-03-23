@@ -11,6 +11,13 @@ public enum SnakeGameState
 public sealed class SnakeGameController : MonoBehaviour
 {
     private static SnakeGameController instance;
+    private static readonly Vector2Int[] CardinalDirections =
+    {
+        Vector2Int.up,
+        Vector2Int.down,
+        Vector2Int.left,
+        Vector2Int.right
+    };
     private const int MinX = -10;
     private const int MaxX = 10;
     private const int MinY = -16;
@@ -22,6 +29,9 @@ public sealed class SnakeGameController : MonoBehaviour
     private const float BaseMoveInterval = 0.22f;
     private const float MinMoveInterval = 0.08f;
     private const float SpeedUpFactor = 0.96f;
+    private const float MaxInteriorWallCoverage = 0.20f;
+    private const int MinInteriorWallLength = 2;
+    private const int MaxInteriorWallLength = 7;
 
     private const float GameplayViewportBottom = 0.24f;
     private const float GameplayViewportHeight = 0.62f;
@@ -38,6 +48,8 @@ public sealed class SnakeGameController : MonoBehaviour
     private readonly List<SnakeSegmentView> snakeViews = new List<SnakeSegmentView>();
     private readonly Dictionary<Vector2Int, GameObject> appleObjects = new Dictionary<Vector2Int, GameObject>();
     private readonly List<GameObject> wallObjects = new List<GameObject>();
+    private readonly HashSet<Vector2Int> interiorWallCells = new HashSet<Vector2Int>();
+    private readonly List<GameObject> interiorWallObjects = new List<GameObject>();
 
     private readonly System.Random random = new System.Random();
     private Font wallEmojiFont;
@@ -209,9 +221,10 @@ public sealed class SnakeGameController : MonoBehaviour
         queuedDirection = Vector2Int.up;
 
         ResetSnake();
+        ClearInteriorWalls();
+        GenerateInteriorWalls(currentLevel);
         SpawnApples(applesTarget);
     }
-
     private int CalculateApplesCount(int level)
     {
         return BaseApplesCount + (level - 1) * ApplesPerLevel;
@@ -246,26 +259,64 @@ public sealed class SnakeGameController : MonoBehaviour
 
         appleObjects.Clear();
 
-        var occupiedCells = new HashSet<Vector2Int>(snakeSegments);
-        int maxAttempts = 5000;
-
-        while (appleObjects.Count < count && maxAttempts > 0)
+        if (count <= 0 || snakeSegments.Count == 0)
         {
-            maxAttempts--;
+            return;
+        }
 
-            int x = random.Next(MinX + 1, MaxX);
-            int y = random.Next(MinY + 1, MaxY);
-            var position = new Vector2Int(x, y);
+        var occupiedCells = new HashSet<Vector2Int>(snakeSegments);
+        List<Vector2Int> reachableCells = GetReachableFreeCells(snakeSegments[0], occupiedCells);
+        if (reachableCells.Count == 0)
+        {
+            return;
+        }
 
-            if (occupiedCells.Contains(position) || appleObjects.ContainsKey(position))
-            {
-                continue;
-            }
+        int spawnCount = Mathf.Min(count, reachableCells.Count);
+        for (int i = 0; i < spawnCount; i++)
+        {
+            int swapIndex = random.Next(i, reachableCells.Count);
+            Vector2Int temp = reachableCells[i];
+            reachableCells[i] = reachableCells[swapIndex];
+            reachableCells[swapIndex] = temp;
 
+            Vector2Int position = reachableCells[i];
             appleObjects[position] = CreateAppleObject(position);
+        }
+
+        if (spawnCount < count)
+        {
+            Debug.LogWarning($"Could only place {spawnCount} apples out of requested {count} on level {currentLevel}.");
         }
     }
 
+    private List<Vector2Int> GetReachableFreeCells(Vector2Int startCell, HashSet<Vector2Int> occupiedCells)
+    {
+        var reachableCells = new List<Vector2Int>();
+        var visited = new HashSet<Vector2Int>();
+        var queue = new Queue<Vector2Int>();
+
+        visited.Add(startCell);
+        queue.Enqueue(startCell);
+
+        while (queue.Count > 0)
+        {
+            Vector2Int current = queue.Dequeue();
+            for (int i = 0; i < CardinalDirections.Length; i++)
+            {
+                Vector2Int next = current + CardinalDirections[i];
+                if (visited.Contains(next) || IsWallCell(next) || occupiedCells.Contains(next))
+                {
+                    continue;
+                }
+
+                visited.Add(next);
+                queue.Enqueue(next);
+                reachableCells.Add(next);
+            }
+        }
+
+        return reachableCells;
+    }
     private GameObject CreateAppleObject(Vector2Int cell)
     {
         var appleObject = new GameObject("Apple");
@@ -387,9 +438,12 @@ public sealed class SnakeGameController : MonoBehaviour
 
     private bool IsWallCell(Vector2Int cell)
     {
-        return cell.x <= MinX || cell.x >= MaxX || cell.y <= MinY || cell.y >= MaxY;
+        return cell.x <= MinX
+            || cell.x >= MaxX
+            || cell.y <= MinY
+            || cell.y >= MaxY
+            || interiorWallCells.Contains(cell);
     }
-
     private void HandleKeyboardInput()
     {
         if (Input.GetKeyDown(KeyCode.W) || Input.GetKeyDown(KeyCode.UpArrow))
@@ -565,27 +619,201 @@ public sealed class SnakeGameController : MonoBehaviour
 
         for (int x = MinX; x <= MaxX; x++)
         {
-            CreateWallBlock(new Vector2Int(x, MinY));
-            CreateWallBlock(new Vector2Int(x, MaxY));
+            CreateWallBlock(new Vector2Int(x, MinY), wallRoot, wallObjects, 1, 2);
+            CreateWallBlock(new Vector2Int(x, MaxY), wallRoot, wallObjects, 1, 2);
         }
 
         for (int y = MinY + 1; y < MaxY; y++)
         {
-            CreateWallBlock(new Vector2Int(MinX, y));
-            CreateWallBlock(new Vector2Int(MaxX, y));
+            CreateWallBlock(new Vector2Int(MinX, y), wallRoot, wallObjects, 1, 2);
+            CreateWallBlock(new Vector2Int(MaxX, y), wallRoot, wallObjects, 1, 2);
         }
     }
 
-    private void CreateWallBlock(Vector2Int cell)
+    private void ClearInteriorWalls()
+    {
+        foreach (var wallObject in interiorWallObjects)
+        {
+            if (wallObject != null)
+            {
+                Destroy(wallObject);
+            }
+        }
+
+        interiorWallObjects.Clear();
+        interiorWallCells.Clear();
+    }
+
+    private void GenerateInteriorWalls(int level)
+    {
+        if (level <= 1 || snakeSegments.Count == 0)
+        {
+            return;
+        }
+
+        int playableWidth = MaxX - MinX - 1;
+        int playableHeight = MaxY - MinY - 1;
+        int playableCells = playableWidth * playableHeight;
+
+        int maxWallCells = Mathf.FloorToInt(playableCells * MaxInteriorWallCoverage);
+        if (maxWallCells < MinInteriorWallLength)
+        {
+            return;
+        }
+
+        int maxWallsByCoverage = maxWallCells / MinInteriorWallLength;
+        int targetWalls = Mathf.Min(level - 1, maxWallsByCoverage);
+        if (targetWalls <= 0)
+        {
+            return;
+        }
+
+        var reservedCells = new HashSet<Vector2Int>(snakeSegments);
+        System.Random levelRandom = CreateLevelRandom(level);
+
+        int usedWallCells = 0;
+        int wallsPlaced = 0;
+        int attempts = 0;
+        int maxAttempts = 12000;
+
+        while (wallsPlaced < targetWalls && attempts < maxAttempts)
+        {
+            attempts++;
+
+            int remainingCellsBudget = maxWallCells - usedWallCells;
+            if (remainingCellsBudget < MinInteriorWallLength)
+            {
+                break;
+            }
+
+            if (!TryCreateInteriorWall(levelRandom, remainingCellsBudget, reservedCells, out List<Vector2Int> wallCells))
+            {
+                continue;
+            }
+
+            for (int i = 0; i < wallCells.Count; i++)
+            {
+                Vector2Int cell = wallCells[i];
+                interiorWallCells.Add(cell);
+                CreateWallBlock(cell, wallRoot, interiorWallObjects, 1, 2);
+            }
+
+            usedWallCells += wallCells.Count;
+            wallsPlaced++;
+        }
+    }
+
+    private bool TryCreateInteriorWall(System.Random levelRandom, int remainingCellsBudget, HashSet<Vector2Int> reservedCells, out List<Vector2Int> wallCells)
+    {
+        int playableWidth = MaxX - MinX - 1;
+        int playableHeight = MaxY - MinY - 1;
+
+        bool firstHorizontal = levelRandom.Next(0, 2) == 0;
+        for (int orientationAttempt = 0; orientationAttempt < 2; orientationAttempt++)
+        {
+            bool isHorizontal = orientationAttempt == 0 ? firstHorizontal : !firstHorizontal;
+            int maxLengthByDimension = (isHorizontal ? playableWidth : playableHeight) - 1;
+            int maxLength = Mathf.Min(MaxInteriorWallLength, maxLengthByDimension, remainingCellsBudget);
+            if (maxLength < MinInteriorWallLength)
+            {
+                continue;
+            }
+
+            int length = levelRandom.Next(MinInteriorWallLength, maxLength + 1);
+            if (TryBuildInteriorWallCells(levelRandom, isHorizontal, length, reservedCells, out wallCells))
+            {
+                return true;
+            }
+        }
+
+        wallCells = null;
+        return false;
+    }
+
+    private bool TryBuildInteriorWallCells(System.Random levelRandom, bool isHorizontal, int length, HashSet<Vector2Int> reservedCells, out List<Vector2Int> wallCells)
+    {
+        wallCells = null;
+
+        int minX = MinX + 1;
+        int maxX = MaxX - 1;
+        int minY = MinY + 1;
+        int maxY = MaxY - 1;
+
+        int startXMin = minX;
+        int startXMax = isHorizontal ? maxX - length + 1 : maxX;
+        int startYMin = minY;
+        int startYMax = isHorizontal ? maxY : maxY - length + 1;
+
+        if (startXMin > startXMax || startYMin > startYMax)
+        {
+            return false;
+        }
+
+        int positionAttempts = 120;
+        for (int attempt = 0; attempt < positionAttempts; attempt++)
+        {
+            int startX = levelRandom.Next(startXMin, startXMax + 1);
+            int startY = levelRandom.Next(startYMin, startYMax + 1);
+
+            if (isHorizontal && startX == minX && length >= (maxX - minX + 1))
+            {
+                continue;
+            }
+
+            if (!isHorizontal && startY == minY && length >= (maxY - minY + 1))
+            {
+                continue;
+            }
+
+            var candidate = new List<Vector2Int>(length);
+            bool blocked = false;
+
+            for (int i = 0; i < length; i++)
+            {
+                Vector2Int cell = isHorizontal
+                    ? new Vector2Int(startX + i, startY)
+                    : new Vector2Int(startX, startY + i);
+
+                if (reservedCells.Contains(cell) || interiorWallCells.Contains(cell))
+                {
+                    blocked = true;
+                    break;
+                }
+
+                candidate.Add(cell);
+            }
+
+            if (blocked)
+            {
+                continue;
+            }
+
+            wallCells = candidate;
+            return true;
+        }
+
+        return false;
+    }
+
+    private static System.Random CreateLevelRandom(int level)
+    {
+        unchecked
+        {
+            int seed = 486187739 ^ (level * 16777619);
+            return new System.Random(seed);
+        }
+    }
+
+    private GameObject CreateWallBlock(Vector2Int cell, Transform parent, List<GameObject> targetList, int fallbackSortingOrder, int emojiSortingOrder)
     {
         var wallObject = new GameObject("Wall");
-        wallObject.transform.SetParent(wallRoot, false);
+        wallObject.transform.SetParent(parent, false);
         wallObject.transform.localPosition = new Vector3(cell.x, cell.y, 0f);
 
         var fallbackRenderer = wallObject.AddComponent<SpriteRenderer>();
         fallbackRenderer.sprite = GetWallFallbackSprite();
         fallbackRenderer.color = Color.white;
-        fallbackRenderer.sortingOrder = 1;
+        fallbackRenderer.sortingOrder = fallbackSortingOrder;
 
         var emojiObject = new GameObject("Emoji");
         emojiObject.transform.SetParent(wallObject.transform, false);
@@ -614,12 +842,12 @@ public sealed class SnakeGameController : MonoBehaviour
                 emojiRenderer.material = emojiFont.material;
             }
 
-            emojiRenderer.sortingOrder = 2;
+            emojiRenderer.sortingOrder = emojiSortingOrder;
         }
 
-        wallObjects.Add(wallObject);
+        targetList?.Add(wallObject);
+        return wallObject;
     }
-
     private Font GetWallEmojiFont()
     {
         if (wallEmojiFont != null)
