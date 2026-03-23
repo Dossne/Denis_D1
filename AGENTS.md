@@ -2,11 +2,11 @@
 
 ## Project intent
 
-This repository contains a Unity 2D prototype for **Farm Merger**:
-a cozy merge game with a farm fantasy theme.
+This repository contains a Unity 2D prototype for **Snake**:
+a cazual mobile video game.
 
 Primary goal:
-- quickly explore and validate the core merge loop
+- quickly explore and validate the core loop
 
 Secondary goals:
 - keep the project easy to iterate on
