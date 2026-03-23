@@ -42,6 +42,15 @@ public sealed class SnakeGameController : MonoBehaviour
     private const float GameplayViewportHeight = 0.62f;
     private const float GameplayViewportTargetAspect = 0.58f;
     private const string SnakeBodyEmoji = "\uD83D\uDFE9";
+    private static readonly Color32[] SnakeColorPalette =
+    {
+        new Color32(126, 211, 33, 255),
+        new Color32(88, 220, 150, 255),
+        new Color32(72, 196, 255, 255),
+        new Color32(184, 132, 255, 255),
+        new Color32(255, 208, 94, 255),
+        new Color32(255, 143, 199, 255)
+    };
 
     private static Sprite wallFallbackSprite;
     private static Sprite appleFallbackSprite;
@@ -85,6 +94,8 @@ public sealed class SnakeGameController : MonoBehaviour
     private float bugSpawnInterval;
     private float bugSpawnTimer;
     private float bugMoveSpeed;
+    private int snakeColorIndex;
+    private Color32 currentSnakeColor = new Color32(126, 211, 33, 255);
     private string statusMessage = string.Empty;
 
     public SnakeGameState State => state;
@@ -244,6 +255,7 @@ public sealed class SnakeGameController : MonoBehaviour
         currentDirection = Vector2Int.up;
         queuedDirection = Vector2Int.up;
 
+        ResetSnakeColor();
         ResetSnake();
         ClearInteriorWalls();
         GenerateInteriorWalls(currentLevel);
@@ -381,6 +393,23 @@ public sealed class SnakeGameController : MonoBehaviour
     private float CalculateTimeLimit(int applesCount)
     {
         return Mathf.Clamp(30f + applesCount * 5f, 30f, 90f);
+    }
+
+    private void ResetSnakeColor()
+    {
+        snakeColorIndex = 0;
+        currentSnakeColor = SnakeColorPalette[snakeColorIndex];
+    }
+
+    private void AdvanceSnakeColor()
+    {
+        if (SnakeColorPalette.Length == 0)
+        {
+            return;
+        }
+
+        snakeColorIndex = (snakeColorIndex + 1) % SnakeColorPalette.Length;
+        currentSnakeColor = SnakeColorPalette[snakeColorIndex];
     }
 
     private void ResetSnake()
@@ -574,6 +603,7 @@ public sealed class SnakeGameController : MonoBehaviour
         }
 
         appleObjects.Remove(appleCell);
+        AdvanceSnakeColor();
         moveInterval = Mathf.Max(MinMoveInterval, moveInterval * SpeedUpFactor);
     }
 
@@ -1276,12 +1306,13 @@ public sealed class SnakeGameController : MonoBehaviour
                 view.FallbackRenderer.sprite = isHead
                     ? GetSnakeHeadFallbackSprite(mouthOpen)
                     : GetSnakeBodyFallbackSprite();
-                view.FallbackRenderer.color = Color.white;
+                view.FallbackRenderer.color = currentSnakeColor;
             }
 
             if (view.EmojiText != null)
             {
                 view.EmojiText.text = isHead ? string.Empty : SnakeBodyEmoji;
+                view.EmojiText.color = currentSnakeColor;
             }
 
             if (view.EmojiRenderer != null)
@@ -1312,7 +1343,7 @@ public sealed class SnakeGameController : MonoBehaviour
         if (headView.FallbackRenderer != null)
         {
             headView.FallbackRenderer.sprite = GetSnakeHeadFallbackSprite(mouthOpen);
-            headView.FallbackRenderer.color = Color.white;
+            headView.FallbackRenderer.color = currentSnakeColor;
         }
 
         if (headView.EmojiText != null)
