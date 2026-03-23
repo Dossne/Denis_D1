@@ -40,6 +40,10 @@ public sealed class SnakeGameController : MonoBehaviour
     private const float BugSpawnStepPerLevel = 0.5f;
     private const float AppleVisualScale = 1.2f;
     private const float BugVisualScale = 1.2f;
+    private const int HeartStartLevel = 2;
+    private const float HeartRespawnDelay = 20f;
+    private const float HeartShieldDuration = 5f;
+    private const float HeartBlinkInterval = 0.5f;
 
     private const float GameplayViewportBottom = 0.24f;
     private const float GameplayViewportHeight = 0.62f;
@@ -61,6 +65,7 @@ public sealed class SnakeGameController : MonoBehaviour
     private static Sprite snakeHeadClosedFallbackSprite;
     private static Sprite snakeBodyFallbackSprite;
     private static Sprite bugFallbackSprite;
+    private static Sprite heartFallbackSprite;
 
     private readonly List<Vector2Int> snakeSegments = new List<Vector2Int>();
     private readonly List<SnakeSegmentView> snakeViews = new List<SnakeSegmentView>();
@@ -69,6 +74,9 @@ public sealed class SnakeGameController : MonoBehaviour
     private readonly HashSet<Vector2Int> interiorWallCells = new HashSet<Vector2Int>();
     private readonly List<GameObject> interiorWallObjects = new List<GameObject>();
     private readonly List<BugView> bugViews = new List<BugView>();
+    private readonly HashSet<Vector2Int> borderWallCells = new HashSet<Vector2Int>();
+    private readonly Dictionary<Vector2Int, GameObject> borderWallByCell = new Dictionary<Vector2Int, GameObject>();
+    private readonly Dictionary<Vector2Int, GameObject> interiorWallByCell = new Dictionary<Vector2Int, GameObject>();
 
     private readonly System.Random random = new System.Random();
     private Font wallEmojiFont;
@@ -78,6 +86,7 @@ public sealed class SnakeGameController : MonoBehaviour
     private Transform snakeRoot;
     private Transform appleRoot;
     private Transform bugRoot;
+    private Transform heartRoot;
 
     private Camera mainCamera;
     private Camera backgroundCamera;
@@ -104,6 +113,13 @@ public sealed class SnakeGameController : MonoBehaviour
     private bool isKeyboardDirectionHeld;
     private bool isBoostActive;
     private float boostSourceMoveInterval;
+    private GameObject heartObject;
+    private Vector2Int heartCell;
+    private float heartRespawnTimer;
+    private float heartShieldRemaining;
+    private float heartBlinkTimer;
+    private bool isHeartActiveOnField;
+    private bool isSnakeVisible = true;
     private string statusMessage = string.Empty;
 
     public SnakeGameState State => state;
@@ -140,7 +156,6 @@ public sealed class SnakeGameController : MonoBehaviour
 
         ConfigureCamera();
         CreateRoots();
-        BuildWalls();
         BeginLevel(1);
     }
 
@@ -179,6 +194,7 @@ public sealed class SnakeGameController : MonoBehaviour
         }
 
         HandleKeyboardInput();
+        UpdateHeartState(Time.deltaTime);
         UpdateBugs(Time.deltaTime);
         if (state != SnakeGameState.Playing)
         {
@@ -283,13 +299,16 @@ public sealed class SnakeGameController : MonoBehaviour
         ResetDirectionBoostState();
 
         ResetSnakeColor();
+        SetSnakeVisibility(true);
         ResetSnake();
+        ClearHeartObject();
         ClearInteriorWalls();
+        BuildWalls();
         GenerateInteriorWalls(currentLevel);
         SpawnApples(applesTarget);
         InitializeBugSystem(currentLevel, baseMoveInterval);
+        InitializeHeartSystem();
     }
-
     private void InitializeBugSystem(int level, float levelStartMoveInterval)
     {
         ClearBugs();
@@ -335,8 +354,15 @@ public sealed class SnakeGameController : MonoBehaviour
 
         if (snakeSegments.Count > 0 && IsHeadCollidingWithBug(snakeSegments[0]))
         {
-            LoseLevel("You hit a bug");
-            return;
+            if (IsHeartShieldActive())
+            {
+                TryRemoveBugsAtCell(snakeSegments[0]);
+            }
+            else
+            {
+                LoseLevel("You hit a bug");
+                return;
+            }
         }
 
         bugSpawnTimer -= deltaTime;
@@ -349,7 +375,6 @@ public sealed class SnakeGameController : MonoBehaviour
             }
         }
     }
-
     private void SpawnBug()
     {
         if (bugRoot == null)
@@ -364,25 +389,8 @@ public sealed class SnakeGameController : MonoBehaviour
 
     private bool IsHeadCollidingWithBug(Vector2Int headCell)
     {
-        for (int i = 0; i < bugViews.Count; i++)
-        {
-            BugView bug = bugViews[i];
-            if (bug == null || bug.Root == null)
-            {
-                continue;
-            }
-
-            Vector3 position = bug.Root.transform.localPosition;
-            var bugCell = new Vector2Int(Mathf.RoundToInt(position.x), Mathf.RoundToInt(position.y));
-            if (bugCell == headCell)
-            {
-                return true;
-            }
-        }
-
-        return false;
+        return IsBugAtCell(headCell);
     }
-
     private void RemoveBugAt(int index)
     {
         if (index < 0 || index >= bugViews.Count)
@@ -412,6 +420,240 @@ public sealed class SnakeGameController : MonoBehaviour
 
         bugViews.Clear();
     }
+    private void UpdateHeartState(float deltaTime)
+    {
+        if (heartShieldRemaining > 0f)
+        {
+            heartShieldRemaining = Mathf.Max(0f, heartShieldRemaining - deltaTime);
+            heartBlinkTimer -= deltaTime;
+
+            while (heartShieldRemaining > 0f && heartBlinkTimer <= 0f)
+            {
+                heartBlinkTimer += HeartBlinkInterval;
+                SetSnakeVisibility(!isSnakeVisible);
+            }
+
+            if (heartShieldRemaining <= 0f)
+            {
+                heartBlinkTimer = HeartBlinkInterval;
+                SetSnakeVisibility(true);
+            }
+        }
+
+        if (currentLevel < HeartStartLevel || isHeartActiveOnField)
+        {
+            return;
+        }
+
+        if (heartRespawnTimer > 0f && !float.IsPositiveInfinity(heartRespawnTimer))
+        {
+            heartRespawnTimer -= deltaTime;
+        }
+
+        if (heartRespawnTimer <= 0f)
+        {
+            if (TrySpawnHeart())
+            {
+                heartRespawnTimer = float.PositiveInfinity;
+            }
+            else
+            {
+                heartRespawnTimer = 0f;
+            }
+        }
+    }
+
+    private void InitializeHeartSystem()
+    {
+        heartRespawnTimer = float.PositiveInfinity;
+        heartShieldRemaining = 0f;
+        heartBlinkTimer = HeartBlinkInterval;
+        SetSnakeVisibility(true);
+
+        if (currentLevel < HeartStartLevel)
+        {
+            return;
+        }
+
+        heartRespawnTimer = 0f;
+        TrySpawnHeart();
+    }
+
+    private bool TrySpawnHeart()
+    {
+        if (heartRoot == null || snakeSegments.Count == 0 || currentLevel < HeartStartLevel)
+        {
+            return false;
+        }
+
+        var occupiedBySnake = new HashSet<Vector2Int>(snakeSegments);
+        List<Vector2Int> candidates = GetReachableFreeCells(snakeSegments[0], occupiedBySnake);
+        if (candidates.Count == 0)
+        {
+            return false;
+        }
+
+        for (int i = candidates.Count - 1; i >= 0; i--)
+        {
+            Vector2Int cell = candidates[i];
+            if (cell.x <= MinX || cell.x >= MaxX || cell.y <= MinY || cell.y >= MaxY)
+            {
+                candidates.RemoveAt(i);
+                continue;
+            }
+
+            if (appleObjects.ContainsKey(cell) || IsBugAtCell(cell) || occupiedBySnake.Contains(cell) || IsWallCell(cell))
+            {
+                candidates.RemoveAt(i);
+            }
+        }
+
+        if (candidates.Count == 0)
+        {
+            return false;
+        }
+
+        int index = random.Next(0, candidates.Count);
+        heartCell = candidates[index];
+        heartObject = CreateHeartObject(heartCell);
+        isHeartActiveOnField = heartObject != null;
+        return isHeartActiveOnField;
+    }
+
+    private GameObject CreateHeartObject(Vector2Int cell)
+    {
+        var newHeart = new GameObject("Heart");
+        newHeart.transform.SetParent(heartRoot, false);
+        newHeart.transform.localPosition = new Vector3(cell.x, cell.y, 0f);
+        newHeart.transform.localScale = Vector3.one * AppleVisualScale;
+
+        var fallbackRenderer = newHeart.AddComponent<SpriteRenderer>();
+        fallbackRenderer.sprite = GetHeartFallbackSprite();
+        fallbackRenderer.color = Color.white;
+        fallbackRenderer.sortingOrder = 5;
+
+        var emojiObject = new GameObject("Emoji");
+        emojiObject.transform.SetParent(newHeart.transform, false);
+        emojiObject.transform.localPosition = new Vector3(0f, 0f, -0.05f);
+
+        var textMesh = emojiObject.AddComponent<TextMesh>();
+        textMesh.text = "\u2764\uFE0F";
+        textMesh.anchor = TextAnchor.MiddleCenter;
+        textMesh.alignment = TextAlignment.Center;
+        textMesh.characterSize = 0.22f;
+        textMesh.fontSize = 96;
+        textMesh.color = Color.white;
+        textMesh.richText = false;
+
+        Font emojiFont = GetWallEmojiFont();
+        bool canRenderEmoji = emojiFont != null;
+        if (canRenderEmoji)
+        {
+            textMesh.font = emojiFont;
+        }
+
+        MeshRenderer emojiRenderer = emojiObject.GetComponent<MeshRenderer>();
+        if (emojiRenderer != null)
+        {
+            if (canRenderEmoji)
+            {
+                emojiRenderer.material = emojiFont.material;
+            }
+
+            emojiRenderer.sortingOrder = 6;
+        }
+
+        fallbackRenderer.enabled = true;
+        return newHeart;
+    }
+
+    private void CollectHeart()
+    {
+        if (!isHeartActiveOnField)
+        {
+            return;
+        }
+
+        ClearHeartObject();
+        heartRespawnTimer = HeartRespawnDelay;
+        heartShieldRemaining += HeartShieldDuration;
+        heartBlinkTimer = HeartBlinkInterval;
+        SetSnakeVisibility(true);
+    }
+
+    private void ClearHeartObject()
+    {
+        if (heartObject != null)
+        {
+            Destroy(heartObject);
+        }
+
+        heartObject = null;
+        heartCell = new Vector2Int(int.MinValue, int.MinValue);
+        isHeartActiveOnField = false;
+    }
+
+    private static bool IsBorderCell(Vector2Int cell)
+    {
+        return cell.x == MinX || cell.x == MaxX || cell.y == MinY || cell.y == MaxY;
+    }
+
+    private static bool IsOutsidePlayableBounds(Vector2Int cell)
+    {
+        return cell.x < MinX || cell.x > MaxX || cell.y < MinY || cell.y > MaxY;
+    }
+
+    private bool IsHeartShieldActive()
+    {
+        return heartShieldRemaining > 0f;
+    }
+
+    private bool IsBugAtCell(Vector2Int cell)
+    {
+        for (int i = 0; i < bugViews.Count; i++)
+        {
+            BugView bug = bugViews[i];
+            if (bug == null || bug.Root == null)
+            {
+                continue;
+            }
+
+            Vector3 position = bug.Root.transform.localPosition;
+            var bugCell = new Vector2Int(Mathf.RoundToInt(position.x), Mathf.RoundToInt(position.y));
+            if (bugCell == cell)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private bool TryRemoveBugsAtCell(Vector2Int cell)
+    {
+        bool removed = false;
+        for (int i = bugViews.Count - 1; i >= 0; i--)
+        {
+            BugView bug = bugViews[i];
+            if (bug == null || bug.Root == null)
+            {
+                continue;
+            }
+
+            Vector3 position = bug.Root.transform.localPosition;
+            var bugCell = new Vector2Int(Mathf.RoundToInt(position.x), Mathf.RoundToInt(position.y));
+            if (bugCell != cell)
+            {
+                continue;
+            }
+
+            RemoveBugAt(i);
+            removed = true;
+        }
+
+        return removed;
+    }
+
     private int CalculateApplesCount(int level)
     {
         return BaseApplesCount + (level - 1) * ApplesPerLevel;
@@ -575,17 +817,34 @@ public sealed class SnakeGameController : MonoBehaviour
         currentDirection = queuedDirection;
 
         Vector2Int nextHead = snakeSegments[0] + currentDirection;
-
-        if (IsWallCell(nextHead))
+        if (!TryResolveBorderTransition(ref nextHead))
         {
-            LoseLevel("You hit the wall");
             return;
         }
 
+        if (IsWallCell(nextHead))
+        {
+            if (!IsHeartShieldActive() || !RemoveWallAt(nextHead))
+            {
+                LoseLevel("You hit the wall");
+                return;
+            }
+        }
+
+        bool willCollectHeart = isHeartActiveOnField && nextHead == heartCell;
+        bool hasShieldForThisStep = IsHeartShieldActive() || willCollectHeart;
+
         if (IsHeadCollidingWithBug(nextHead))
         {
-            LoseLevel("You hit a bug");
-            return;
+            if (hasShieldForThisStep)
+            {
+                TryRemoveBugsAtCell(nextHead);
+            }
+            else
+            {
+                LoseLevel("You hit a bug");
+                return;
+            }
         }
 
         bool willEatApple = appleObjects.ContainsKey(nextHead);
@@ -616,6 +875,11 @@ public sealed class SnakeGameController : MonoBehaviour
             snakeSegments.RemoveAt(tailIndex + 1);
         }
 
+        if (willCollectHeart)
+        {
+            CollectHeart();
+        }
+
         SyncSnakeRenderers();
 
         if (appleObjects.Count == 0)
@@ -642,6 +906,9 @@ public sealed class SnakeGameController : MonoBehaviour
     private void WinLevel()
     {
         ResetDirectionBoostState();
+        heartShieldRemaining = 0f;
+        heartBlinkTimer = HeartBlinkInterval;
+        SetSnakeVisibility(true);
         state = SnakeGameState.Won;
         statusMessage = "Level complete";
     }
@@ -649,17 +916,138 @@ public sealed class SnakeGameController : MonoBehaviour
     private void LoseLevel(string reason)
     {
         ResetDirectionBoostState();
+        heartShieldRemaining = 0f;
+        heartBlinkTimer = HeartBlinkInterval;
+        SetSnakeVisibility(true);
         state = SnakeGameState.Lost;
         statusMessage = reason;
     }
-
     private bool IsWallCell(Vector2Int cell)
     {
-        return cell.x <= MinX
-            || cell.x >= MaxX
-            || cell.y <= MinY
-            || cell.y >= MaxY
-            || interiorWallCells.Contains(cell);
+        if (IsOutsidePlayableBounds(cell))
+        {
+            return true;
+        }
+
+        return borderWallCells.Contains(cell) || interiorWallCells.Contains(cell);
+    }
+
+    private bool TryResolveBorderTransition(ref Vector2Int nextHead)
+    {
+        if (!IsBorderCell(nextHead))
+        {
+            return true;
+        }
+
+        if (borderWallCells.Contains(nextHead))
+        {
+            if (!IsHeartShieldActive())
+            {
+                LoseLevel("You hit the wall");
+                return false;
+            }
+
+            RemoveBorderWallAt(nextHead);
+            Vector2Int oppositeBorderCell = GetOppositeBorderCell(nextHead, currentDirection);
+            RemoveBorderWallAt(oppositeBorderCell);
+        }
+
+        if (!borderWallCells.Contains(nextHead))
+        {
+            nextHead = GetTunnelExitCell(nextHead, currentDirection);
+        }
+
+        return true;
+    }
+
+    private static Vector2Int GetOppositeBorderCell(Vector2Int borderCell, Vector2Int direction)
+    {
+        if (direction == Vector2Int.left)
+        {
+            return new Vector2Int(MaxX, borderCell.y);
+        }
+
+        if (direction == Vector2Int.right)
+        {
+            return new Vector2Int(MinX, borderCell.y);
+        }
+
+        if (direction == Vector2Int.up)
+        {
+            return new Vector2Int(borderCell.x, MinY);
+        }
+
+        return new Vector2Int(borderCell.x, MaxY);
+    }
+
+    private static Vector2Int GetTunnelExitCell(Vector2Int borderCell, Vector2Int direction)
+    {
+        if (direction == Vector2Int.left)
+        {
+            return new Vector2Int(MaxX - 1, borderCell.y);
+        }
+
+        if (direction == Vector2Int.right)
+        {
+            return new Vector2Int(MinX + 1, borderCell.y);
+        }
+
+        if (direction == Vector2Int.up)
+        {
+            return new Vector2Int(borderCell.x, MinY + 1);
+        }
+
+        return new Vector2Int(borderCell.x, MaxY - 1);
+    }
+
+    private bool RemoveWallAt(Vector2Int cell)
+    {
+        if (RemoveInteriorWallAt(cell))
+        {
+            return true;
+        }
+
+        return RemoveBorderWallAt(cell);
+    }
+
+    private bool RemoveBorderWallAt(Vector2Int cell)
+    {
+        if (!borderWallCells.Remove(cell))
+        {
+            return false;
+        }
+
+        if (borderWallByCell.TryGetValue(cell, out var wallObject))
+        {
+            borderWallByCell.Remove(cell);
+            wallObjects.Remove(wallObject);
+            if (wallObject != null)
+            {
+                Destroy(wallObject);
+            }
+        }
+
+        return true;
+    }
+
+    private bool RemoveInteriorWallAt(Vector2Int cell)
+    {
+        if (!interiorWallCells.Remove(cell))
+        {
+            return false;
+        }
+
+        if (interiorWallByCell.TryGetValue(cell, out var wallObject))
+        {
+            interiorWallByCell.Remove(cell);
+            interiorWallObjects.Remove(wallObject);
+            if (wallObject != null)
+            {
+                Destroy(wallObject);
+            }
+        }
+
+        return true;
     }
     private void HandleKeyboardInput()
     {
@@ -885,7 +1273,11 @@ public sealed class SnakeGameController : MonoBehaviour
 
         bugRoot = new GameObject("Bugs").transform;
         bugRoot.SetParent(worldRoot);
+
+        heartRoot = new GameObject("Hearts").transform;
+        heartRoot.SetParent(worldRoot);
     }
+
     private void BuildWalls()
     {
         foreach (var wallObject in wallObjects)
@@ -897,17 +1289,33 @@ public sealed class SnakeGameController : MonoBehaviour
         }
 
         wallObjects.Clear();
+        borderWallCells.Clear();
+        borderWallByCell.Clear();
 
         for (int x = MinX; x <= MaxX; x++)
         {
-            CreateWallBlock(new Vector2Int(x, MinY), wallRoot, wallObjects, 1, 2);
-            CreateWallBlock(new Vector2Int(x, MaxY), wallRoot, wallObjects, 1, 2);
+            Vector2Int bottomCell = new Vector2Int(x, MinY);
+            GameObject bottomWall = CreateWallBlock(bottomCell, wallRoot, wallObjects, 1, 2);
+            borderWallCells.Add(bottomCell);
+            borderWallByCell[bottomCell] = bottomWall;
+
+            Vector2Int topCell = new Vector2Int(x, MaxY);
+            GameObject topWall = CreateWallBlock(topCell, wallRoot, wallObjects, 1, 2);
+            borderWallCells.Add(topCell);
+            borderWallByCell[topCell] = topWall;
         }
 
         for (int y = MinY + 1; y < MaxY; y++)
         {
-            CreateWallBlock(new Vector2Int(MinX, y), wallRoot, wallObjects, 1, 2);
-            CreateWallBlock(new Vector2Int(MaxX, y), wallRoot, wallObjects, 1, 2);
+            Vector2Int leftCell = new Vector2Int(MinX, y);
+            GameObject leftWall = CreateWallBlock(leftCell, wallRoot, wallObjects, 1, 2);
+            borderWallCells.Add(leftCell);
+            borderWallByCell[leftCell] = leftWall;
+
+            Vector2Int rightCell = new Vector2Int(MaxX, y);
+            GameObject rightWall = CreateWallBlock(rightCell, wallRoot, wallObjects, 1, 2);
+            borderWallCells.Add(rightCell);
+            borderWallByCell[rightCell] = rightWall;
         }
     }
 
@@ -923,6 +1331,7 @@ public sealed class SnakeGameController : MonoBehaviour
 
         interiorWallObjects.Clear();
         interiorWallCells.Clear();
+        interiorWallByCell.Clear();
     }
 
     private void GenerateInteriorWalls(int level)
@@ -976,14 +1385,14 @@ public sealed class SnakeGameController : MonoBehaviour
             {
                 Vector2Int cell = wallCells[i];
                 interiorWallCells.Add(cell);
-                CreateWallBlock(cell, wallRoot, interiorWallObjects, 1, 2);
+                GameObject wallObject = CreateWallBlock(cell, wallRoot, interiorWallObjects, 1, 2);
+                interiorWallByCell[cell] = wallObject;
             }
 
             usedWallCells += wallCells.Count;
             wallsPlaced++;
         }
     }
-
     private bool TryCreateInteriorWall(System.Random levelRandom, int remainingCellsBudget, HashSet<Vector2Int> reservedCells, out List<Vector2Int> wallCells)
     {
         int playableWidth = MaxX - MinX - 1;
@@ -1238,6 +1647,58 @@ public sealed class SnakeGameController : MonoBehaviour
         bugFallbackSprite = Sprite.Create(texture, new Rect(0f, 0f, textureSize, textureSize), new Vector2(0.5f, 0.5f), textureSize);
         return bugFallbackSprite;
     }
+    private static Sprite GetHeartFallbackSprite()
+    {
+        if (heartFallbackSprite != null)
+        {
+            return heartFallbackSprite;
+        }
+
+        const int textureSize = 16;
+        var texture = new Texture2D(textureSize, textureSize, TextureFormat.RGBA32, false);
+        texture.filterMode = FilterMode.Point;
+        texture.wrapMode = TextureWrapMode.Clamp;
+
+        var transparent = new Color32(0, 0, 0, 0);
+        var mainColor = new Color32(224, 66, 99, 255);
+        var shadeColor = new Color32(186, 44, 74, 255);
+        var highlightColor = new Color32(246, 131, 156, 255);
+
+        var pixels = new Color32[textureSize * textureSize];
+        for (int i = 0; i < pixels.Length; i++)
+        {
+            pixels[i] = transparent;
+        }
+
+        for (int y = 1; y < textureSize; y++)
+        {
+            for (int x = 1; x < textureSize - 1; x++)
+            {
+                float nx = (x - 7.5f) / 7f;
+                float ny = (y - 6f) / 7f;
+                float heart = Mathf.Pow(nx * nx + ny * ny - 1f, 3f) - (nx * nx * ny * ny * ny);
+                if (heart > 0f)
+                {
+                    continue;
+                }
+
+                Color32 color = x <= 7 ? shadeColor : mainColor;
+                if (y >= 9 && x >= 4 && x <= 10)
+                {
+                    color = highlightColor;
+                }
+
+                pixels[y * textureSize + x] = color;
+            }
+        }
+
+        texture.SetPixels32(pixels);
+        texture.Apply();
+
+        heartFallbackSprite = Sprite.Create(texture, new Rect(0f, 0f, textureSize, textureSize), new Vector2(0.5f, 0.5f), textureSize);
+        return heartFallbackSprite;
+    }
+
     private Font GetWallEmojiFont()
     {
         if (wallEmojiFont != null)
@@ -1404,6 +1865,7 @@ public sealed class SnakeGameController : MonoBehaviour
                     ? GetSnakeHeadFallbackSprite(mouthOpen)
                     : GetSnakeBodyFallbackSprite();
                 view.FallbackRenderer.color = currentSnakeColor;
+                view.FallbackRenderer.enabled = isSnakeVisible;
             }
 
             if (view.EmojiText != null)
@@ -1414,7 +1876,7 @@ public sealed class SnakeGameController : MonoBehaviour
 
             if (view.EmojiRenderer != null)
             {
-                view.EmojiRenderer.enabled = !isHead;
+                view.EmojiRenderer.enabled = !isHead && isSnakeVisible;
                 view.EmojiRenderer.sortingOrder = 11;
             }
         }
@@ -1441,6 +1903,7 @@ public sealed class SnakeGameController : MonoBehaviour
         {
             headView.FallbackRenderer.sprite = GetSnakeHeadFallbackSprite(mouthOpen);
             headView.FallbackRenderer.color = currentSnakeColor;
+            headView.FallbackRenderer.enabled = isSnakeVisible;
         }
 
         if (headView.EmojiText != null)
@@ -1454,6 +1917,30 @@ public sealed class SnakeGameController : MonoBehaviour
         }
     }
 
+    private void SetSnakeVisibility(bool visible)
+    {
+        isSnakeVisible = visible;
+
+        for (int i = 0; i < snakeViews.Count; i++)
+        {
+            SnakeSegmentView view = snakeViews[i];
+            if (view == null)
+            {
+                continue;
+            }
+
+            if (view.FallbackRenderer != null)
+            {
+                view.FallbackRenderer.enabled = visible;
+            }
+
+            if (view.EmojiRenderer != null)
+            {
+                bool isHead = i == 0;
+                view.EmojiRenderer.enabled = visible && !isHead;
+            }
+        }
+    }
     private bool IsHeadMouthOpen()
     {
         if (state != SnakeGameState.Playing || moveInterval <= 0.0001f)
