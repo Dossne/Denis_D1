@@ -29,9 +29,10 @@ public sealed class SnakeGameController : MonoBehaviour
     private const string SnakeHeadEmoji = "\uD83D\uDC0D";
     private const string SnakeBodyEmoji = "\uD83D\uDFE9";
 
-    private static Sprite pixelSprite;
     private static Sprite wallFallbackSprite;
     private static Sprite appleFallbackSprite;
+    private static Sprite snakeHeadFallbackSprite;
+    private static Sprite snakeBodyFallbackSprite;
 
     private readonly List<Vector2Int> snakeSegments = new List<Vector2Int>();
     private readonly List<SnakeSegmentView> snakeViews = new List<SnakeSegmentView>();
@@ -767,12 +768,13 @@ public sealed class SnakeGameController : MonoBehaviour
                 continue;
             }
 
+            bool isHead = i == 0;
             view.Root.transform.localPosition = new Vector3(snakeSegments[i].x, snakeSegments[i].y, 0f);
 
-            bool isHead = i == 0;
             if (view.FallbackRenderer != null)
             {
-                view.FallbackRenderer.color = isHead ? new Color32(155, 232, 75, 255) : new Color32(126, 211, 33, 255);
+                view.FallbackRenderer.sprite = isHead ? GetSnakeHeadFallbackSprite() : GetSnakeBodyFallbackSprite();
+                view.FallbackRenderer.color = Color.white;
             }
 
             if (view.EmojiText != null)
@@ -793,8 +795,8 @@ public sealed class SnakeGameController : MonoBehaviour
         segmentObject.transform.SetParent(parent, false);
 
         var fallbackRenderer = segmentObject.AddComponent<SpriteRenderer>();
-        fallbackRenderer.sprite = GetPixelSprite();
-        fallbackRenderer.color = new Color32(126, 211, 33, 255);
+        fallbackRenderer.sprite = GetSnakeBodyFallbackSprite();
+        fallbackRenderer.color = Color.white;
         fallbackRenderer.sortingOrder = 10;
 
         var emojiObject = new GameObject("Emoji");
@@ -805,7 +807,7 @@ public sealed class SnakeGameController : MonoBehaviour
         textMesh.text = SnakeBodyEmoji;
         textMesh.anchor = TextAnchor.MiddleCenter;
         textMesh.alignment = TextAlignment.Center;
-        textMesh.characterSize = 0.23f;
+        textMesh.characterSize = 0.28f;
         textMesh.fontSize = 96;
         textMesh.color = Color.white;
         textMesh.richText = false;
@@ -835,30 +837,93 @@ public sealed class SnakeGameController : MonoBehaviour
             EmojiRenderer = emojiRenderer
         };
     }
-    private static Sprite GetPixelSprite()
+    private static Sprite GetSnakeHeadFallbackSprite()
     {
-        if (pixelSprite != null)
+        if (snakeHeadFallbackSprite != null)
         {
-            return pixelSprite;
+            return snakeHeadFallbackSprite;
         }
 
+        snakeHeadFallbackSprite = CreateSnakeFallbackSprite(true);
+        return snakeHeadFallbackSprite;
+    }
+
+    private static Sprite GetSnakeBodyFallbackSprite()
+    {
+        if (snakeBodyFallbackSprite != null)
+        {
+            return snakeBodyFallbackSprite;
+        }
+
+        snakeBodyFallbackSprite = CreateSnakeFallbackSprite(false);
+        return snakeBodyFallbackSprite;
+    }
+
+    private static Sprite CreateSnakeFallbackSprite(bool isHead)
+    {
         const int textureSize = 16;
 
         var texture = new Texture2D(textureSize, textureSize, TextureFormat.RGBA32, false);
         texture.filterMode = FilterMode.Point;
         texture.wrapMode = TextureWrapMode.Clamp;
 
+        var transparent = new Color32(0, 0, 0, 0);
+        var mainColor = new Color32(126, 211, 33, 255);
+        var shadeColor = new Color32(92, 163, 24, 255);
+        var highlightColor = new Color32(163, 234, 85, 255);
+        var eyeWhite = new Color32(244, 249, 252, 255);
+        var eyePupil = new Color32(28, 36, 46, 255);
+        var tongueColor = new Color32(233, 88, 111, 255);
+
         var pixels = new Color32[textureSize * textureSize];
         for (int i = 0; i < pixels.Length; i++)
         {
-            pixels[i] = new Color32(255, 255, 255, 255);
+            pixels[i] = transparent;
+        }
+
+        for (int y = 1; y <= 14; y++)
+        {
+            for (int x = 1; x <= 14; x++)
+            {
+                float dx = (x - 7.5f) / 6.6f;
+                float dy = (y - 7.5f) / 6.6f;
+                if (dx * dx + dy * dy > 1f)
+                {
+                    continue;
+                }
+
+                Color32 color = x <= 7 ? shadeColor : mainColor;
+                if (y >= 9 && x >= 4 && x <= 11)
+                {
+                    color = highlightColor;
+                }
+
+                pixels[y * textureSize + x] = color;
+            }
+        }
+
+        if (isHead)
+        {
+            pixels[10 * textureSize + 5] = eyeWhite;
+            pixels[10 * textureSize + 10] = eyeWhite;
+            pixels[10 * textureSize + 6] = eyePupil;
+            pixels[10 * textureSize + 9] = eyePupil;
+            pixels[4 * textureSize + 7] = tongueColor;
+            pixels[3 * textureSize + 6] = tongueColor;
+            pixels[3 * textureSize + 8] = tongueColor;
+        }
+        else
+        {
+            for (int x = 5; x <= 10; x++)
+            {
+                pixels[7 * textureSize + x] = highlightColor;
+            }
         }
 
         texture.SetPixels32(pixels);
         texture.Apply();
 
-        pixelSprite = Sprite.Create(texture, new Rect(0f, 0f, textureSize, textureSize), new Vector2(0.5f, 0.5f), textureSize);
-        return pixelSprite;
+        return Sprite.Create(texture, new Rect(0f, 0f, textureSize, textureSize), new Vector2(0.5f, 0.5f), textureSize);
     }
 }
 
