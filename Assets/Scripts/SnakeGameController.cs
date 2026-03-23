@@ -32,7 +32,7 @@ public sealed class SnakeGameController : MonoBehaviour
 
     private readonly List<Vector2Int> snakeSegments = new List<Vector2Int>();
     private readonly List<SpriteRenderer> snakeRenderers = new List<SpriteRenderer>();
-    private readonly Dictionary<Vector2Int, SpriteRenderer> appleRenderers = new Dictionary<Vector2Int, SpriteRenderer>();
+    private readonly Dictionary<Vector2Int, GameObject> appleObjects = new Dictionary<Vector2Int, GameObject>();
     private readonly List<GameObject> wallObjects = new List<GameObject>();
 
     private readonly System.Random random = new System.Random();
@@ -62,7 +62,7 @@ public sealed class SnakeGameController : MonoBehaviour
 
     public SnakeGameState State => state;
     public int CurrentLevel => currentLevel;
-    public int ApplesRemaining => appleRenderers.Count;
+    public int ApplesRemaining => appleObjects.Count;
     public int ApplesTarget => applesTarget;
     public float TimeRemaining => Mathf.Max(0f, timeRemaining);
     public string StatusMessage => statusMessage;
@@ -221,20 +221,20 @@ public sealed class SnakeGameController : MonoBehaviour
 
     private void SpawnApples(int count)
     {
-        foreach (var renderer in appleRenderers.Values)
+        foreach (var appleObject in appleObjects.Values)
         {
-            if (renderer != null)
+            if (appleObject != null)
             {
-                Destroy(renderer.gameObject);
+                Destroy(appleObject);
             }
         }
 
-        appleRenderers.Clear();
+        appleObjects.Clear();
 
         var occupiedCells = new HashSet<Vector2Int>(snakeSegments);
         int maxAttempts = 5000;
 
-        while (appleRenderers.Count < count && maxAttempts > 0)
+        while (appleObjects.Count < count && maxAttempts > 0)
         {
             maxAttempts--;
 
@@ -242,15 +242,57 @@ public sealed class SnakeGameController : MonoBehaviour
             int y = random.Next(MinY + 1, MaxY);
             var position = new Vector2Int(x, y);
 
-            if (occupiedCells.Contains(position) || appleRenderers.ContainsKey(position))
+            if (occupiedCells.Contains(position) || appleObjects.ContainsKey(position))
             {
                 continue;
             }
 
-            var renderer = CreateBlockRenderer(appleRoot, "Apple", new Color32(237, 106, 94, 255), 5);
-            renderer.transform.localPosition = new Vector3(position.x, position.y, 0f);
-            appleRenderers[position] = renderer;
+            appleObjects[position] = CreateAppleObject(position);
         }
+    }
+
+    private GameObject CreateAppleObject(Vector2Int cell)
+    {
+        var appleObject = new GameObject("Apple");
+        appleObject.transform.SetParent(appleRoot, false);
+        appleObject.transform.localPosition = new Vector3(cell.x, cell.y, 0f);
+
+        var fallbackRenderer = appleObject.AddComponent<SpriteRenderer>();
+        fallbackRenderer.sprite = GetPixelSprite();
+        fallbackRenderer.color = new Color32(237, 106, 94, 255);
+        fallbackRenderer.sortingOrder = 5;
+
+        var emojiObject = new GameObject("Emoji");
+        emojiObject.transform.SetParent(appleObject.transform, false);
+        emojiObject.transform.localPosition = new Vector3(0f, 0f, -0.05f);
+
+        var textMesh = emojiObject.AddComponent<TextMesh>();
+        textMesh.text = "\uD83C\uDF4E";
+        textMesh.anchor = TextAnchor.MiddleCenter;
+        textMesh.alignment = TextAlignment.Center;
+        textMesh.characterSize = 0.2f;
+        textMesh.fontSize = 96;
+        textMesh.color = Color.white;
+        textMesh.richText = false;
+
+        Font emojiFont = GetWallEmojiFont();
+        if (emojiFont != null)
+        {
+            textMesh.font = emojiFont;
+        }
+
+        MeshRenderer emojiRenderer = emojiObject.GetComponent<MeshRenderer>();
+        if (emojiRenderer != null)
+        {
+            if (emojiFont != null)
+            {
+                emojiRenderer.material = emojiFont.material;
+            }
+
+            emojiRenderer.sortingOrder = 6;
+        }
+
+        return appleObject;
     }
 
     private void StepSnake()
@@ -265,7 +307,7 @@ public sealed class SnakeGameController : MonoBehaviour
             return;
         }
 
-        bool willEatApple = appleRenderers.ContainsKey(nextHead);
+        bool willEatApple = appleObjects.ContainsKey(nextHead);
         int tailIndex = snakeSegments.Count - 1;
 
         for (int i = 0; i < snakeSegments.Count; i++)
@@ -295,7 +337,7 @@ public sealed class SnakeGameController : MonoBehaviour
 
         SyncSnakeRenderers();
 
-        if (appleRenderers.Count == 0)
+        if (appleObjects.Count == 0)
         {
             WinLevel();
         }
@@ -303,12 +345,12 @@ public sealed class SnakeGameController : MonoBehaviour
 
     private void EatApple(Vector2Int appleCell)
     {
-        if (appleRenderers.TryGetValue(appleCell, out var renderer) && renderer != null)
+        if (appleObjects.TryGetValue(appleCell, out var appleObject) && appleObject != null)
         {
-            Destroy(renderer.gameObject);
+            Destroy(appleObject);
         }
 
-        appleRenderers.Remove(appleCell);
+        appleObjects.Remove(appleCell);
         moveInterval = Mathf.Max(MinMoveInterval, moveInterval * SpeedUpFactor);
     }
 
@@ -685,5 +727,4 @@ public sealed class SnakeGameController : MonoBehaviour
         return pixelSprite;
     }
 }
-
 
