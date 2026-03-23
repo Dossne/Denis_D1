@@ -7,14 +7,20 @@ public sealed class SnakeUIController : MonoBehaviour
     private SnakeGameController gameController;
     private Font uiFont;
 
+    private RectTransform canvasRect;
+    private RectTransform playAreaFrame;
+    private RectTransform controlsRoot;
+
     private Text levelText;
     private Text timerText;
     private Text statusText;
 
     private Button actionButton;
+    private RectTransform actionButtonRect;
     private Text actionButtonText;
 
     private SnakeGameState lastState = (SnakeGameState)(-1);
+    private Rect lastViewport = new Rect(-1f, -1f, -1f, -1f);
 
     private void Awake()
     {
@@ -35,6 +41,7 @@ public sealed class SnakeUIController : MonoBehaviour
 
         EnsureEventSystem();
         BuildUi();
+        ApplyLayoutFromViewport(true);
     }
 
     private void Update()
@@ -44,6 +51,7 @@ public sealed class SnakeUIController : MonoBehaviour
             return;
         }
 
+        ApplyLayoutFromViewport(false);
         UpdateHud();
         UpdateStateControls();
     }
@@ -74,28 +82,74 @@ public sealed class SnakeUIController : MonoBehaviour
         scaler.referenceResolution = new Vector2(1080f, 1920f);
         scaler.matchWidthOrHeight = 0.5f;
 
-        RectTransform canvasRect = canvasObject.GetComponent<RectTransform>();
+        canvasRect = canvasObject.GetComponent<RectTransform>();
 
-        levelText = CreateText("LevelText", canvasRect, 30, TextAnchor.UpperLeft);
-        SetRect(levelText.rectTransform, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(24f, -24f), new Vector2(680f, 80f));
+        var playAreaFrameObject = new GameObject("PlayAreaFrame", typeof(RectTransform), typeof(Image));
+        playAreaFrameObject.transform.SetParent(canvasRect, false);
+        playAreaFrame = playAreaFrameObject.GetComponent<RectTransform>();
 
-        timerText = CreateText("TimerText", canvasRect, 30, TextAnchor.UpperRight);
-        SetRect(timerText.rectTransform, new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(-24f, -24f), new Vector2(320f, 80f));
+        var playAreaImage = playAreaFrameObject.GetComponent<Image>();
+        playAreaImage.color = new Color32(24, 38, 55, 100);
+        playAreaFrame.SetAsFirstSibling();
+
+        levelText = CreateText("LevelText", canvasRect, 34, TextAnchor.MiddleCenter);
+        timerText = CreateText("TimerText", canvasRect, 30, TextAnchor.MiddleCenter);
 
         statusText = CreateText("StatusText", canvasRect, 44, TextAnchor.MiddleCenter);
-        SetRect(statusText.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0f, 130f), new Vector2(700f, 120f));
 
         actionButton = CreateButton("ActionButton", canvasRect, out actionButtonText);
-        SetRect(actionButton.GetComponent<RectTransform>(), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0f, -10f), new Vector2(380f, 110f));
+        actionButtonRect = actionButton.GetComponent<RectTransform>();
         actionButton.gameObject.SetActive(false);
 
-        RectTransform controlsRoot = CreateRectTransform("DirectionControls", canvasRect);
-        SetRect(controlsRoot, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 170f), new Vector2(360f, 280f));
+        controlsRoot = CreateRectTransform("DirectionControls", canvasRect);
 
         CreateDirectionButton(controlsRoot, "UpButton", "UP", new Vector2(0f, 90f), gameController.QueueUp);
         CreateDirectionButton(controlsRoot, "DownButton", "DOWN", new Vector2(0f, -90f), gameController.QueueDown);
         CreateDirectionButton(controlsRoot, "LeftButton", "LEFT", new Vector2(-95f, 0f), gameController.QueueLeft);
         CreateDirectionButton(controlsRoot, "RightButton", "RIGHT", new Vector2(95f, 0f), gameController.QueueRight);
+    }
+
+    private void ApplyLayoutFromViewport(bool force)
+    {
+        Rect viewport = gameController.GameplayViewport;
+        if (viewport.width <= 0f || viewport.height <= 0f)
+        {
+            viewport = new Rect(0.2f, 0.24f, 0.6f, 0.62f);
+        }
+
+        if (!force && IsSameViewport(lastViewport, viewport))
+        {
+            return;
+        }
+
+        lastViewport = viewport;
+
+        float topY = Mathf.Clamp01(viewport.yMax);
+        float bottomY = Mathf.Clamp01(viewport.yMin);
+        float centerX = Mathf.Clamp01(viewport.center.x);
+        float centerY = Mathf.Clamp01(viewport.center.y);
+
+        SetRect(playAreaFrame, new Vector2(viewport.xMin, viewport.yMin), new Vector2(viewport.xMax, viewport.yMax), new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
+
+        SetRect(levelText.rectTransform, new Vector2(centerX, Mathf.Clamp01(topY + 0.05f)), new Vector2(centerX, Mathf.Clamp01(topY + 0.05f)), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(780f, 80f));
+        SetRect(timerText.rectTransform, new Vector2(centerX, Mathf.Clamp01(topY + 0.015f)), new Vector2(centerX, Mathf.Clamp01(topY + 0.015f)), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(420f, 70f));
+
+        SetRect(statusText.rectTransform, new Vector2(centerX, Mathf.Clamp01(centerY + 0.08f)), new Vector2(centerX, Mathf.Clamp01(centerY + 0.08f)), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(700f, 120f));
+
+        SetRect(actionButtonRect, new Vector2(centerX, centerY), new Vector2(centerX, centerY), new Vector2(0.5f, 0.5f), new Vector2(0f, -10f), new Vector2(380f, 110f));
+
+        float controlsY = Mathf.Clamp01(bottomY - 0.12f);
+        SetRect(controlsRoot, new Vector2(centerX, controlsY), new Vector2(centerX, controlsY), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(360f, 280f));
+    }
+
+    private bool IsSameViewport(Rect previous, Rect current)
+    {
+        const float epsilon = 0.001f;
+
+        return Mathf.Abs(previous.x - current.x) < epsilon
+            && Mathf.Abs(previous.y - current.y) < epsilon
+            && Mathf.Abs(previous.width - current.width) < epsilon
+            && Mathf.Abs(previous.height - current.height) < epsilon;
     }
 
     private void UpdateHud()
@@ -219,4 +273,3 @@ public sealed class SnakeUIController : MonoBehaviour
         rect.sizeDelta = size;
     }
 }
-

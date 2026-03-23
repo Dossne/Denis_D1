@@ -22,6 +22,10 @@ public sealed class SnakeGameController : MonoBehaviour
     private const float MinMoveInterval = 0.08f;
     private const float SpeedUpFactor = 0.96f;
 
+    private const float GameplayViewportBottom = 0.24f;
+    private const float GameplayViewportHeight = 0.62f;
+    private const float GameplayViewportTargetAspect = 0.58f;
+
     private static Sprite pixelSprite;
 
     private readonly List<Vector2Int> snakeSegments = new List<Vector2Int>();
@@ -35,6 +39,11 @@ public sealed class SnakeGameController : MonoBehaviour
     private Transform wallRoot;
     private Transform snakeRoot;
     private Transform appleRoot;
+
+    private Camera mainCamera;
+    private Rect gameplayViewport = new Rect(0.2f, GameplayViewportBottom, 0.6f, GameplayViewportHeight);
+    private int cachedScreenWidth;
+    private int cachedScreenHeight;
 
     private Vector2Int currentDirection = Vector2Int.up;
     private Vector2Int queuedDirection = Vector2Int.up;
@@ -53,6 +62,7 @@ public sealed class SnakeGameController : MonoBehaviour
     public int ApplesTarget => applesTarget;
     public float TimeRemaining => Mathf.Max(0f, timeRemaining);
     public string StatusMessage => statusMessage;
+    public Rect GameplayViewport => gameplayViewport;
 
     private void Awake()
     {
@@ -64,6 +74,8 @@ public sealed class SnakeGameController : MonoBehaviour
 
     private void Update()
     {
+        EnsureCameraViewport();
+
         if (state == SnakeGameState.Won)
         {
             if (Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.Space))
@@ -340,7 +352,7 @@ public sealed class SnakeGameController : MonoBehaviour
 
     private void ConfigureCamera()
     {
-        Camera mainCamera = Camera.main;
+        mainCamera = Camera.main;
         if (mainCamera == null)
         {
             var cameraObject = new GameObject("Main Camera");
@@ -352,6 +364,50 @@ public sealed class SnakeGameController : MonoBehaviour
         mainCamera.orthographicSize = 18f;
         mainCamera.transform.position = new Vector3(0f, 0f, -10f);
         mainCamera.backgroundColor = new Color32(17, 24, 39, 255);
+
+        ConfigurePortraitOrientation();
+        ApplyGameplayViewport();
+    }
+
+    private void EnsureCameraViewport()
+    {
+        if (mainCamera == null)
+        {
+            return;
+        }
+
+        if (cachedScreenWidth != Screen.width || cachedScreenHeight != Screen.height)
+        {
+            ApplyGameplayViewport();
+        }
+    }
+
+    private void ConfigurePortraitOrientation()
+    {
+        if (!Application.isMobilePlatform)
+        {
+            return;
+        }
+
+        Screen.orientation = ScreenOrientation.Portrait;
+        Screen.autorotateToLandscapeLeft = false;
+        Screen.autorotateToLandscapeRight = false;
+        Screen.autorotateToPortrait = true;
+        Screen.autorotateToPortraitUpsideDown = false;
+    }
+
+    private void ApplyGameplayViewport()
+    {
+        cachedScreenWidth = Mathf.Max(1, Screen.width);
+        cachedScreenHeight = Mathf.Max(1, Screen.height);
+
+        float screenAspect = (float)cachedScreenWidth / cachedScreenHeight;
+        float viewportWidth = GameplayViewportHeight * GameplayViewportTargetAspect / screenAspect;
+        viewportWidth = Mathf.Clamp(viewportWidth, 0.22f, 0.92f);
+
+        float viewportX = (1f - viewportWidth) * 0.5f;
+        gameplayViewport = new Rect(viewportX, GameplayViewportBottom, viewportWidth, GameplayViewportHeight);
+        mainCamera.rect = gameplayViewport;
     }
 
     private void CreateRoots()
