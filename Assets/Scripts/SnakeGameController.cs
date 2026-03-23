@@ -1,4 +1,3 @@
-using System;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -45,7 +44,6 @@ public sealed class SnakeGameController : MonoBehaviour
     private int applesTarget;
     private float moveInterval;
     private float moveTimer;
-    private float levelTimeLimit;
     private float timeRemaining;
     private string statusMessage = string.Empty;
 
@@ -152,8 +150,7 @@ public sealed class SnakeGameController : MonoBehaviour
     {
         currentLevel = Mathf.Max(1, level);
         applesTarget = CalculateApplesCount(currentLevel);
-        levelTimeLimit = CalculateTimeLimit(applesTarget);
-        timeRemaining = levelTimeLimit;
+        timeRemaining = CalculateTimeLimit(applesTarget);
 
         moveInterval = Mathf.Max(MinMoveInterval, BaseMoveInterval - (currentLevel - 1) * 0.005f);
         moveTimer = moveInterval;

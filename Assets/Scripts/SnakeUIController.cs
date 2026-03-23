@@ -24,6 +24,13 @@ public sealed class SnakeUIController : MonoBehaviour
             gameController = FindObjectOfType<SnakeGameController>();
         }
 
+        if (gameController == null)
+        {
+            Debug.LogError("SnakeUIController requires SnakeGameController.");
+            enabled = false;
+            return;
+        }
+
         uiFont = Resources.GetBuiltinResource<Font>("Arial.ttf");
 
         EnsureEventSystem();
@@ -78,7 +85,7 @@ public sealed class SnakeUIController : MonoBehaviour
         statusText = CreateText("StatusText", canvasRect, 44, TextAnchor.MiddleCenter);
         SetRect(statusText.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0f, 130f), new Vector2(700f, 120f));
 
-        actionButton = CreateButton("ActionButton", canvasRect, new Vector2(380f, 110f), out actionButtonText);
+        actionButton = CreateButton("ActionButton", canvasRect, out actionButtonText);
         SetRect(actionButton.GetComponent<RectTransform>(), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0f, -10f), new Vector2(380f, 110f));
         actionButton.gameObject.SetActive(false);
 
@@ -138,7 +145,7 @@ public sealed class SnakeUIController : MonoBehaviour
 
     private void CreateDirectionButton(RectTransform parent, string name, string label, Vector2 anchoredPosition, UnityEngine.Events.UnityAction onClick)
     {
-        Button button = CreateButton(name, parent, new Vector2(120f, 80f), out Text buttonText);
+        Button button = CreateButton(name, parent, out Text buttonText);
         buttonText.text = label;
         button.onClick.AddListener(onClick);
 
@@ -146,7 +153,7 @@ public sealed class SnakeUIController : MonoBehaviour
         SetRect(rect, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), anchoredPosition, new Vector2(120f, 80f));
     }
 
-    private Button CreateButton(string name, Transform parent, Vector2 size, out Text label)
+    private Button CreateButton(string name, Transform parent, out Text label)
     {
         var buttonObject = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(Button));
         buttonObject.transform.SetParent(parent, false);
