@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
@@ -5,12 +6,14 @@ using UnityEngine.UI;
 public sealed class SnakeUIController : MonoBehaviour
 {
     private static SnakeUIController instance;
+    private static Sprite controlCircleSprite;
 
     private SnakeGameController gameController;
     private Font uiFont;
 
     private RectTransform canvasRect;
     private RectTransform controlsRoot;
+    private RectTransform controlsPanelRect;
 
     private Text levelText;
     private Text timerText;
@@ -141,11 +144,55 @@ public sealed class SnakeUIController : MonoBehaviour
         actionButton.gameObject.SetActive(false);
 
         controlsRoot = CreateRectTransform("DirectionControls", canvasRect);
+        CreateControlsPanel();
+        CreateCenterPadIndicator();
 
-        CreateDirectionButton(controlsRoot, "UpButton", "UP", new Vector2(0f, 100f), gameController.QueueUp);
-        CreateDirectionButton(controlsRoot, "DownButton", "DOWN", new Vector2(0f, -100f), gameController.QueueDown);
-        CreateDirectionButton(controlsRoot, "LeftButton", "LEFT", new Vector2(-115f, 0f), gameController.QueueLeft);
-        CreateDirectionButton(controlsRoot, "RightButton", "RIGHT", new Vector2(115f, 0f), gameController.QueueRight);
+        CreateDirectionButton(controlsRoot, "UpButton", "UP", new Vector2(0f, 150f), gameController.QueueUp);
+        CreateDirectionButton(controlsRoot, "LeftButton", "LEFT", new Vector2(-130f, 20f), gameController.QueueLeft);
+        CreateDirectionButton(controlsRoot, "RightButton", "RIGHT", new Vector2(130f, 20f), gameController.QueueRight);
+        CreateDirectionButton(controlsRoot, "DownButton", "DOWN", new Vector2(0f, -110f), gameController.QueueDown);
+    }
+
+    private void CreateControlsPanel()
+    {
+        var panelObject = new GameObject("ControlsPanel", typeof(RectTransform), typeof(Image));
+        panelObject.transform.SetParent(controlsRoot, false);
+
+        controlsPanelRect = panelObject.GetComponent<RectTransform>();
+
+        var panelImage = panelObject.GetComponent<Image>();
+        panelImage.color = new Color32(18, 20, 25, 170);
+        panelImage.raycastTarget = false;
+
+        var panelShadow = panelObject.AddComponent<Shadow>();
+        panelShadow.effectColor = new Color32(0, 0, 0, 130);
+        panelShadow.effectDistance = new Vector2(0f, -10f);
+
+        controlsPanelRect.SetAsFirstSibling();
+    }
+
+    private void CreateCenterPadIndicator()
+    {
+        RectTransform indicatorRoot = CreateRectTransform("CenterIndicator", controlsRoot);
+        SetRect(indicatorRoot, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0f, 20f), new Vector2(90f, 90f));
+
+        CreatePadGlyph(indicatorRoot, "Up", "^", new Vector2(0f, 18f));
+        CreatePadGlyph(indicatorRoot, "Left", "<", new Vector2(-18f, 0f));
+        CreatePadGlyph(indicatorRoot, "Right", ">", new Vector2(18f, 0f));
+        CreatePadGlyph(indicatorRoot, "Down", "v", new Vector2(0f, -18f));
+
+        Text centerDiamond = CreateText("CenterDot", indicatorRoot, 18, TextAnchor.MiddleCenter);
+        centerDiamond.text = "+";
+        centerDiamond.color = new Color32(168, 168, 168, 255);
+        SetRect(centerDiamond.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(24f, 24f));
+    }
+
+    private void CreatePadGlyph(RectTransform parent, string name, string glyph, Vector2 anchoredPosition)
+    {
+        Text text = CreateText(name + "Glyph", parent, 18, TextAnchor.MiddleCenter);
+        text.text = glyph;
+        text.color = new Color32(146, 146, 146, 255);
+        SetRect(text.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), anchoredPosition, new Vector2(24f, 24f));
     }
 
     private void ApplyLayoutFromViewport(bool force)
@@ -175,8 +222,13 @@ public sealed class SnakeUIController : MonoBehaviour
 
         SetRect(actionButtonRect, new Vector2(centerX, centerY), new Vector2(centerX, centerY), new Vector2(0.5f, 0.5f), new Vector2(0f, -10f), new Vector2(380f, 110f));
 
-        float controlsY = Mathf.Clamp01(bottomY - 0.13f);
-        SetRect(controlsRoot, new Vector2(centerX, controlsY), new Vector2(centerX, controlsY), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(420f, 320f));
+        float controlsY = Mathf.Clamp(bottomY - 0.17f, 0.16f, 0.4f);
+        SetRect(controlsRoot, new Vector2(centerX, controlsY), new Vector2(centerX, controlsY), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(560f, 520f));
+
+        if (controlsPanelRect != null)
+        {
+            SetRect(controlsPanelRect, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0f, -8f), new Vector2(520f, 500f));
+        }
     }
 
     private static bool IsSameViewport(Rect previous, Rect current)
@@ -247,12 +299,120 @@ public sealed class SnakeUIController : MonoBehaviour
 
     private void CreateDirectionButton(RectTransform parent, string name, string label, Vector2 anchoredPosition, UnityEngine.Events.UnityAction onClick)
     {
-        Button button = CreateButton(name, parent, out Text buttonText);
-        buttonText.text = label;
-        button.onClick.AddListener(onClick);
+        var buttonObject = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(Button));
+        buttonObject.transform.SetParent(parent, false);
 
-        RectTransform rect = button.GetComponent<RectTransform>();
-        SetRect(rect, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), anchoredPosition, new Vector2(140f, 86f));
+        var rect = buttonObject.GetComponent<RectTransform>();
+        SetRect(rect, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), anchoredPosition, new Vector2(132f, 132f));
+
+        var outerImage = buttonObject.GetComponent<Image>();
+        outerImage.sprite = GetControlCircleSprite();
+        outerImage.color = new Color32(96, 96, 96, 255);
+
+        var button = buttonObject.GetComponent<Button>();
+        button.targetGraphic = outerImage;
+
+        ColorBlock colors = button.colors;
+        colors.normalColor = Color.white;
+        colors.highlightedColor = new Color32(245, 245, 245, 255);
+        colors.pressedColor = new Color32(220, 220, 220, 255);
+        colors.selectedColor = colors.highlightedColor;
+        colors.disabledColor = new Color32(180, 180, 180, 160);
+        button.colors = colors;
+
+        var shadow = buttonObject.AddComponent<Shadow>();
+        shadow.effectColor = new Color32(0, 0, 0, 110);
+        shadow.effectDistance = new Vector2(0f, -6f);
+
+        var innerObject = new GameObject("Inner", typeof(RectTransform), typeof(Image));
+        innerObject.transform.SetParent(buttonObject.transform, false);
+        var innerRect = innerObject.GetComponent<RectTransform>();
+        SetRect(innerRect, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0f, 0f), new Vector2(112f, 112f));
+
+        var innerImage = innerObject.GetComponent<Image>();
+        innerImage.sprite = GetControlCircleSprite();
+        innerImage.color = new Color32(244, 197, 26, 255);
+        innerImage.raycastTarget = false;
+
+        var shineOneObject = new GameObject("ShineOne", typeof(RectTransform), typeof(Image));
+        shineOneObject.transform.SetParent(innerObject.transform, false);
+        var shineOneRect = shineOneObject.GetComponent<RectTransform>();
+        SetRect(shineOneRect, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(-22f, 20f), new Vector2(34f, 24f));
+
+        var shineOneImage = shineOneObject.GetComponent<Image>();
+        shineOneImage.sprite = GetControlCircleSprite();
+        shineOneImage.color = new Color32(255, 255, 255, 120);
+        shineOneImage.raycastTarget = false;
+
+        var shineTwoObject = new GameObject("ShineTwo", typeof(RectTransform), typeof(Image));
+        shineTwoObject.transform.SetParent(innerObject.transform, false);
+        var shineTwoRect = shineTwoObject.GetComponent<RectTransform>();
+        SetRect(shineTwoRect, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(-6f, 28f), new Vector2(16f, 12f));
+
+        var shineTwoImage = shineTwoObject.GetComponent<Image>();
+        shineTwoImage.sprite = GetControlCircleSprite();
+        shineTwoImage.color = new Color32(255, 255, 255, 90);
+        shineTwoImage.raycastTarget = false;
+
+        button.onClick.AddListener(onClick);
+        AddPointerDownListener(buttonObject, onClick);
+
+        Text directionLabel = CreateText(name + "Label", parent, 28, TextAnchor.MiddleCenter);
+        directionLabel.text = label;
+        directionLabel.color = new Color32(175, 175, 175, 255);
+
+        Vector2 labelOffset = label == "UP" ? new Vector2(0f, 94f) : new Vector2(0f, -96f);
+        SetRect(directionLabel.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), anchoredPosition + labelOffset, new Vector2(170f, 40f));
+    }
+
+    private static void AddPointerDownListener(GameObject buttonObject, UnityEngine.Events.UnityAction onPress)
+    {
+        var eventTrigger = buttonObject.AddComponent<EventTrigger>();
+        if (eventTrigger.triggers == null)
+        {
+            eventTrigger.triggers = new List<EventTrigger.Entry>();
+        }
+
+        var pointerDownEntry = new EventTrigger.Entry { eventID = EventTriggerType.PointerDown };
+        pointerDownEntry.callback.AddListener(_ => onPress.Invoke());
+        eventTrigger.triggers.Add(pointerDownEntry);
+    }
+
+    private static Sprite GetControlCircleSprite()
+    {
+        if (controlCircleSprite != null)
+        {
+            return controlCircleSprite;
+        }
+
+        const int size = 128;
+        float center = (size - 1) * 0.5f;
+        float radius = size * 0.5f - 1f;
+
+        var texture = new Texture2D(size, size, TextureFormat.RGBA32, false);
+        texture.filterMode = FilterMode.Bilinear;
+        texture.wrapMode = TextureWrapMode.Clamp;
+
+        var pixels = new Color32[size * size];
+        for (int y = 0; y < size; y++)
+        {
+            for (int x = 0; x < size; x++)
+            {
+                float dx = x - center;
+                float dy = y - center;
+                float distance = Mathf.Sqrt(dx * dx + dy * dy);
+
+                float alpha = Mathf.Clamp01(radius + 0.75f - distance);
+                byte alphaByte = (byte)Mathf.RoundToInt(alpha * 255f);
+                pixels[y * size + x] = new Color32(255, 255, 255, alphaByte);
+            }
+        }
+
+        texture.SetPixels32(pixels);
+        texture.Apply();
+
+        controlCircleSprite = Sprite.Create(texture, new Rect(0f, 0f, size, size), new Vector2(0.5f, 0.5f), size);
+        return controlCircleSprite;
     }
 
     private Button CreateButton(string name, Transform parent, out Text label)
