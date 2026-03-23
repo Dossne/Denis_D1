@@ -1,7 +1,5 @@
 using System.Collections.Generic;
 using UnityEngine;
-using TMPro;
-using UnityEngine.TextCore.LowLevel;
 
 public enum SnakeGameState
 {
@@ -39,7 +37,6 @@ public sealed class SnakeGameController : MonoBehaviour
 
     private readonly System.Random random = new System.Random();
     private Font wallEmojiFont;
-    private TMP_FontAsset appleEmojiFontAsset;
 
     private Transform worldRoot;
     private Transform wallRoot;
@@ -265,27 +262,39 @@ public sealed class SnakeGameController : MonoBehaviour
         fallbackRenderer.color = new Color32(237, 106, 94, 255);
         fallbackRenderer.sortingOrder = 5;
 
-        var emojiText = appleObject.AddComponent<TextMeshPro>();
-        emojiText.text = "\U0001F34E";
-        emojiText.alignment = TextAlignmentOptions.Center;
-        emojiText.fontSize = 7f;
-        emojiText.color = Color.white;
-        emojiText.enableWordWrapping = false;
-        emojiText.richText = false;
-        emojiText.sortingOrder = 6;
-        emojiText.transform.localPosition = new Vector3(0f, -0.03f, -0.05f);
+        var emojiObject = new GameObject("Emoji");
+        emojiObject.transform.SetParent(appleObject.transform, false);
+        emojiObject.transform.localPosition = new Vector3(0f, 0f, -0.05f);
 
-        TMP_FontAsset emojiFontAsset = GetAppleEmojiFontAsset();
-        bool hasEmojiGlyph = emojiFontAsset != null && emojiFontAsset.HasCharacters("\U0001F34E");
+        var textMesh = emojiObject.AddComponent<TextMesh>();
+        textMesh.text = "\uD83C\uDF4E";
+        textMesh.anchor = TextAnchor.MiddleCenter;
+        textMesh.alignment = TextAlignment.Center;
+        textMesh.characterSize = 0.22f;
+        textMesh.fontSize = 96;
+        textMesh.color = Color.white;
+        textMesh.richText = false;
 
-        fallbackRenderer.enabled = !hasEmojiGlyph;
-        emojiText.enabled = hasEmojiGlyph;
+        Font emojiFont = GetWallEmojiFont();
+        bool canRenderEmoji = emojiFont != null;
 
-        if (hasEmojiGlyph)
+        if (canRenderEmoji)
         {
-            emojiText.font = emojiFontAsset;
-            emojiText.UpdateMeshPadding();
+            textMesh.font = emojiFont;
         }
+
+        MeshRenderer emojiRenderer = emojiObject.GetComponent<MeshRenderer>();
+        if (emojiRenderer != null)
+        {
+            if (canRenderEmoji)
+            {
+                emojiRenderer.material = emojiFont.material;
+            }
+
+            emojiRenderer.sortingOrder = 6;
+        }
+
+        fallbackRenderer.enabled = !canRenderEmoji;
 
         return appleObject;
     }
@@ -620,37 +629,6 @@ public sealed class SnakeGameController : MonoBehaviour
         return wallEmojiFont;
     }
 
-    private TMP_FontAsset GetAppleEmojiFontAsset()
-    {
-        if (appleEmojiFontAsset != null)
-        {
-            return appleEmojiFontAsset;
-        }
-
-        Font sourceFont = GetWallEmojiFont();
-        if (sourceFont == null)
-        {
-            return null;
-        }
-
-        appleEmojiFontAsset = TMP_FontAsset.CreateFontAsset(
-            sourceFont,
-            90,
-            9,
-            GlyphRenderMode.SDFAA,
-            512,
-            512,
-            AtlasPopulationMode.Dynamic,
-            true);
-
-        if (appleEmojiFontAsset != null)
-        {
-            appleEmojiFontAsset.TryAddCharacters("\U0001F34E", out _);
-        }
-
-        return appleEmojiFontAsset;
-    }
-
     private static Sprite GetWallFallbackSprite()
     {
         if (wallFallbackSprite != null)
@@ -753,4 +731,3 @@ public sealed class SnakeGameController : MonoBehaviour
         return pixelSprite;
     }
 }
-
