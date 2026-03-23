@@ -31,7 +31,7 @@ public sealed class SnakeUIController : MonoBehaviour
             return;
         }
 
-        uiFont = Resources.GetBuiltinResource<Font>("Arial.ttf");
+        uiFont = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
 
         EnsureEventSystem();
         BuildUi();
@@ -219,3 +219,4 @@ public sealed class SnakeUIController : MonoBehaviour
         rect.sizeDelta = size;
     }
 }
+
