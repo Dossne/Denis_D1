@@ -32,9 +32,10 @@ public sealed class SnakeGameController : MonoBehaviour
     private readonly List<Vector2Int> snakeSegments = new List<Vector2Int>();
     private readonly List<SpriteRenderer> snakeRenderers = new List<SpriteRenderer>();
     private readonly Dictionary<Vector2Int, SpriteRenderer> appleRenderers = new Dictionary<Vector2Int, SpriteRenderer>();
-    private readonly List<SpriteRenderer> wallRenderers = new List<SpriteRenderer>();
+    private readonly List<GameObject> wallObjects = new List<GameObject>();
 
     private readonly System.Random random = new System.Random();
+    private Font wallEmojiFont;
 
     private Transform worldRoot;
     private Transform wallRoot;
@@ -490,36 +491,82 @@ public sealed class SnakeGameController : MonoBehaviour
 
     private void BuildWalls()
     {
-        foreach (var renderer in wallRenderers)
+        foreach (var wallObject in wallObjects)
         {
-            if (renderer != null)
+            if (wallObject != null)
             {
-                Destroy(renderer.gameObject);
+                Destroy(wallObject);
             }
         }
 
-        wallRenderers.Clear();
-
-        var wallColor = new Color32(45, 68, 92, 255);
+        wallObjects.Clear();
 
         for (int x = MinX; x <= MaxX; x++)
         {
-            CreateWallBlock(new Vector2Int(x, MinY), wallColor);
-            CreateWallBlock(new Vector2Int(x, MaxY), wallColor);
+            CreateWallBlock(new Vector2Int(x, MinY));
+            CreateWallBlock(new Vector2Int(x, MaxY));
         }
 
         for (int y = MinY + 1; y < MaxY; y++)
         {
-            CreateWallBlock(new Vector2Int(MinX, y), wallColor);
-            CreateWallBlock(new Vector2Int(MaxX, y), wallColor);
+            CreateWallBlock(new Vector2Int(MinX, y));
+            CreateWallBlock(new Vector2Int(MaxX, y));
         }
     }
 
-    private void CreateWallBlock(Vector2Int cell, Color color)
+    private void CreateWallBlock(Vector2Int cell)
     {
-        var renderer = CreateBlockRenderer(wallRoot, "Wall", color, 1);
-        renderer.transform.localPosition = new Vector3(cell.x, cell.y, 0f);
-        wallRenderers.Add(renderer);
+        var wallObject = new GameObject("Wall");
+        wallObject.transform.SetParent(wallRoot, false);
+        wallObject.transform.localPosition = new Vector3(cell.x, cell.y, 0f);
+
+        var textMesh = wallObject.AddComponent<TextMesh>();
+        textMesh.text = "\uD83E\uDDF1";
+        textMesh.anchor = TextAnchor.MiddleCenter;
+        textMesh.alignment = TextAlignment.Center;
+        textMesh.characterSize = 0.24f;
+        textMesh.fontSize = 64;
+        textMesh.color = Color.white;
+        textMesh.richText = false;
+
+        Font emojiFont = GetWallEmojiFont();
+        if (emojiFont != null)
+        {
+            textMesh.font = emojiFont;
+
+            MeshRenderer meshRenderer = wallObject.GetComponent<MeshRenderer>();
+            if (meshRenderer != null)
+            {
+                meshRenderer.material = emojiFont.material;
+                meshRenderer.sortingOrder = 1;
+            }
+        }
+
+        wallObjects.Add(wallObject);
+    }
+
+    private Font GetWallEmojiFont()
+    {
+        if (wallEmojiFont != null)
+        {
+            return wallEmojiFont;
+        }
+
+        string[] emojiFonts =
+        {
+            "Segoe UI Emoji",
+            "Apple Color Emoji",
+            "Noto Color Emoji",
+            "Segoe UI Symbol"
+        };
+
+        wallEmojiFont = Font.CreateDynamicFontFromOSFont(emojiFonts, 64);
+        if (wallEmojiFont == null)
+        {
+            wallEmojiFont = Font.CreateDynamicFontFromOSFont(new[] { "Arial", "Segoe UI" }, 64);
+        }
+
+        return wallEmojiFont;
     }
 
     private void SyncSnakeRenderers()
