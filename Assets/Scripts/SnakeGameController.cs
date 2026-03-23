@@ -42,6 +42,7 @@ public sealed class SnakeGameController : MonoBehaviour
     private Transform appleRoot;
 
     private Camera mainCamera;
+    private Camera backgroundCamera;
     private Rect gameplayViewport = new Rect(0.2f, GameplayViewportBottom, 0.6f, GameplayViewportHeight);
     private int cachedScreenWidth;
     private int cachedScreenHeight;
@@ -380,10 +381,45 @@ public sealed class SnakeGameController : MonoBehaviour
         mainCamera.orthographic = true;
         mainCamera.orthographicSize = 18f;
         mainCamera.transform.position = new Vector3(0f, 0f, -10f);
+        mainCamera.clearFlags = CameraClearFlags.SolidColor;
         mainCamera.backgroundColor = new Color32(17, 24, 39, 255);
+        mainCamera.depth = -1f;
+        mainCamera.nearClipPlane = 0.1f;
+        mainCamera.farClipPlane = 100f;
 
+        EnsureBackgroundCamera();
         ConfigurePortraitOrientation();
         ApplyGameplayViewport();
+    }
+
+    private void EnsureBackgroundCamera()
+    {
+        if (backgroundCamera == null)
+        {
+            Transform existingBackground = transform.Find("Background Camera");
+            if (existingBackground != null)
+            {
+                backgroundCamera = existingBackground.GetComponent<Camera>();
+            }
+        }
+
+        if (backgroundCamera == null)
+        {
+            var backgroundObject = new GameObject("Background Camera");
+            backgroundObject.transform.SetParent(transform, false);
+            backgroundCamera = backgroundObject.AddComponent<Camera>();
+        }
+
+        backgroundCamera.orthographic = true;
+        backgroundCamera.orthographicSize = 5f;
+        backgroundCamera.transform.position = new Vector3(0f, 0f, -50f);
+        backgroundCamera.clearFlags = CameraClearFlags.SolidColor;
+        backgroundCamera.backgroundColor = new Color32(5, 8, 16, 255);
+        backgroundCamera.cullingMask = 0;
+        backgroundCamera.rect = new Rect(0f, 0f, 1f, 1f);
+        backgroundCamera.depth = -10f;
+        backgroundCamera.nearClipPlane = 0.1f;
+        backgroundCamera.farClipPlane = 100f;
     }
 
     private void EnsureCameraViewport()
@@ -391,6 +427,11 @@ public sealed class SnakeGameController : MonoBehaviour
         if (mainCamera == null)
         {
             return;
+        }
+
+        if (backgroundCamera == null)
+        {
+            EnsureBackgroundCamera();
         }
 
         if (cachedScreenWidth != Screen.width || cachedScreenHeight != Screen.height)
@@ -425,6 +466,11 @@ public sealed class SnakeGameController : MonoBehaviour
         float viewportX = (1f - viewportWidth) * 0.5f;
         gameplayViewport = new Rect(viewportX, GameplayViewportBottom, viewportWidth, GameplayViewportHeight);
         mainCamera.rect = gameplayViewport;
+
+        if (backgroundCamera != null)
+        {
+            backgroundCamera.rect = new Rect(0f, 0f, 1f, 1f);
+        }
     }
 
     private void CreateRoots()

@@ -191,16 +191,17 @@ public sealed class SnakeUIController : MonoBehaviour
 
     private void UpdateHud()
     {
-        int collectedApples = gameController.ApplesTarget - gameController.ApplesRemaining;
+        int applesRemaining = gameController.ApplesRemaining;
 
-        string levelLine = string.Format("Level {0}  Apples {1}/{2}", gameController.CurrentLevel, collectedApples, gameController.ApplesTarget);
+        string levelLine = string.Format("Level {0}  Apples left {1}", gameController.CurrentLevel, applesRemaining);
         if (!string.Equals(lastLevelLine, levelLine))
         {
             lastLevelLine = levelLine;
             levelText.text = levelLine;
         }
 
-        string timerLine = string.Format("Time {0:D2}", Mathf.Max(0, Mathf.CeilToInt(gameController.TimeRemaining)));
+        int secondsLeft = Mathf.Max(0, Mathf.CeilToInt(gameController.TimeRemaining));
+        string timerLine = string.Format("Time left {0:D2}", secondsLeft);
         if (!string.Equals(lastTimerLine, timerLine))
         {
             lastTimerLine = timerLine;
@@ -327,3 +328,4 @@ public sealed class SnakeUIController : MonoBehaviour
         rect.sizeDelta = size;
     }
 }
+
