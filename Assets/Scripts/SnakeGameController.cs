@@ -38,6 +38,8 @@ public sealed class SnakeGameController : MonoBehaviour
     private const float BugBaseSpawnInterval = 10f;
     private const float BugMinSpawnInterval = 5f;
     private const float BugSpawnStepPerLevel = 0.5f;
+    private const float AppleVisualScale = 1.2f;
+    private const float BugVisualScale = 1.2f;
 
     private const float GameplayViewportBottom = 0.24f;
     private const float GameplayViewportHeight = 0.62f;
@@ -524,6 +526,7 @@ public sealed class SnakeGameController : MonoBehaviour
         var appleObject = new GameObject("Apple");
         appleObject.transform.SetParent(appleRoot, false);
         appleObject.transform.localPosition = new Vector3(cell.x, cell.y, 0f);
+        appleObject.transform.localScale = Vector3.one * AppleVisualScale;
 
         var fallbackRenderer = appleObject.AddComponent<SpriteRenderer>();
         fallbackRenderer.sprite = GetAppleFallbackSprite();
@@ -1132,6 +1135,7 @@ public sealed class SnakeGameController : MonoBehaviour
         var bugObject = new GameObject("Bug");
         bugObject.transform.SetParent(bugRoot, false);
         bugObject.transform.localPosition = localPosition;
+        bugObject.transform.localScale = Vector3.one * BugVisualScale;
 
         var fallbackRenderer = bugObject.AddComponent<SpriteRenderer>();
         fallbackRenderer.sprite = GetBugFallbackSprite();
