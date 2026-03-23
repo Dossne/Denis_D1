@@ -12,5 +12,6 @@ public static class SnakeBootstrap
 
         var gameObject = new GameObject("SnakeGame");
         gameObject.AddComponent<SnakeGameController>();
+        gameObject.AddComponent<SnakeUIController>();
     }
 }
