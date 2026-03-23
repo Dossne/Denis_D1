@@ -13,7 +13,6 @@ public sealed class SnakeUIController : MonoBehaviour
 
     private RectTransform canvasRect;
     private RectTransform controlsRoot;
-    private RectTransform controlsPanelRect;
 
     private Text levelText;
     private Text timerText;
@@ -144,55 +143,39 @@ public sealed class SnakeUIController : MonoBehaviour
         actionButton.gameObject.SetActive(false);
 
         controlsRoot = CreateRectTransform("DirectionControls", canvasRect);
-        CreateControlsPanel();
         CreateCenterPadIndicator();
 
-        CreateDirectionButton(controlsRoot, "UpButton", "UP", new Vector2(0f, 150f), gameController.QueueUp);
-        CreateDirectionButton(controlsRoot, "LeftButton", "LEFT", new Vector2(-130f, 20f), gameController.QueueLeft);
-        CreateDirectionButton(controlsRoot, "RightButton", "RIGHT", new Vector2(130f, 20f), gameController.QueueRight);
-        CreateDirectionButton(controlsRoot, "DownButton", "DOWN", new Vector2(0f, -110f), gameController.QueueDown);
-    }
-
-    private void CreateControlsPanel()
-    {
-        var panelObject = new GameObject("ControlsPanel", typeof(RectTransform), typeof(Image));
-        panelObject.transform.SetParent(controlsRoot, false);
-
-        controlsPanelRect = panelObject.GetComponent<RectTransform>();
-
-        var panelImage = panelObject.GetComponent<Image>();
-        panelImage.color = new Color32(18, 20, 25, 170);
-        panelImage.raycastTarget = false;
-
-        var panelShadow = panelObject.AddComponent<Shadow>();
-        panelShadow.effectColor = new Color32(0, 0, 0, 130);
-        panelShadow.effectDistance = new Vector2(0f, -10f);
-
-        controlsPanelRect.SetAsFirstSibling();
+        CreateDirectionButton(controlsRoot, "UpButton", "UP", new Vector2(0f, 128f), gameController.QueueUp);
+        CreateDirectionButton(controlsRoot, "LeftButton", "LEFT", new Vector2(-118f, 10f), gameController.QueueLeft);
+        CreateDirectionButton(controlsRoot, "RightButton", "RIGHT", new Vector2(118f, 10f), gameController.QueueRight);
+        CreateDirectionButton(controlsRoot, "DownButton", "DOWN", new Vector2(0f, -108f), gameController.QueueDown);
     }
 
     private void CreateCenterPadIndicator()
     {
         RectTransform indicatorRoot = CreateRectTransform("CenterIndicator", controlsRoot);
-        SetRect(indicatorRoot, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0f, 20f), new Vector2(90f, 90f));
+        SetRect(indicatorRoot, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0f, 8f), new Vector2(88f, 88f));
 
-        CreatePadGlyph(indicatorRoot, "Up", "^", new Vector2(0f, 18f));
-        CreatePadGlyph(indicatorRoot, "Left", "<", new Vector2(-18f, 0f));
-        CreatePadGlyph(indicatorRoot, "Right", ">", new Vector2(18f, 0f));
-        CreatePadGlyph(indicatorRoot, "Down", "v", new Vector2(0f, -18f));
-
-        Text centerDiamond = CreateText("CenterDot", indicatorRoot, 18, TextAnchor.MiddleCenter);
-        centerDiamond.text = "+";
-        centerDiamond.color = new Color32(168, 168, 168, 255);
-        SetRect(centerDiamond.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(24f, 24f));
+        CreateCenterDiamond(indicatorRoot, "Up", new Vector2(0f, 18f), new Vector2(14f, 14f));
+        CreateCenterDiamond(indicatorRoot, "Left", new Vector2(-18f, 0f), new Vector2(14f, 14f));
+        CreateCenterDiamond(indicatorRoot, "Right", new Vector2(18f, 0f), new Vector2(14f, 14f));
+        CreateCenterDiamond(indicatorRoot, "Down", new Vector2(0f, -18f), new Vector2(14f, 14f));
+        CreateCenterDiamond(indicatorRoot, "Center", Vector2.zero, new Vector2(12f, 12f));
     }
 
-    private void CreatePadGlyph(RectTransform parent, string name, string glyph, Vector2 anchoredPosition)
+    private void CreateCenterDiamond(RectTransform parent, string name, Vector2 anchoredPosition, Vector2 size)
     {
-        Text text = CreateText(name + "Glyph", parent, 18, TextAnchor.MiddleCenter);
-        text.text = glyph;
-        text.color = new Color32(146, 146, 146, 255);
-        SetRect(text.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), anchoredPosition, new Vector2(24f, 24f));
+        var markerObject = new GameObject(name + "Diamond", typeof(RectTransform), typeof(Image));
+        markerObject.transform.SetParent(parent, false);
+
+        var markerRect = markerObject.GetComponent<RectTransform>();
+        SetRect(markerRect, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), anchoredPosition, size);
+        markerRect.localRotation = Quaternion.Euler(0f, 0f, 45f);
+
+        var markerImage = markerObject.GetComponent<Image>();
+        markerImage.sprite = GetControlCircleSprite();
+        markerImage.color = new Color32(122, 122, 122, 255);
+        markerImage.raycastTarget = false;
     }
 
     private void ApplyLayoutFromViewport(bool force)
@@ -222,13 +205,8 @@ public sealed class SnakeUIController : MonoBehaviour
 
         SetRect(actionButtonRect, new Vector2(centerX, centerY), new Vector2(centerX, centerY), new Vector2(0.5f, 0.5f), new Vector2(0f, -10f), new Vector2(380f, 110f));
 
-        float controlsY = Mathf.Clamp(bottomY - 0.17f, 0.16f, 0.4f);
-        SetRect(controlsRoot, new Vector2(centerX, controlsY), new Vector2(centerX, controlsY), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(560f, 520f));
-
-        if (controlsPanelRect != null)
-        {
-            SetRect(controlsPanelRect, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0f, -8f), new Vector2(520f, 500f));
-        }
+        float controlsY = Mathf.Clamp(bottomY - 0.15f, 0.14f, 0.38f);
+        SetRect(controlsRoot, new Vector2(centerX, controlsY), new Vector2(centerX, controlsY), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(470f, 440f));
     }
 
     private static bool IsSameViewport(Rect previous, Rect current)
@@ -303,11 +281,11 @@ public sealed class SnakeUIController : MonoBehaviour
         buttonObject.transform.SetParent(parent, false);
 
         var rect = buttonObject.GetComponent<RectTransform>();
-        SetRect(rect, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), anchoredPosition, new Vector2(132f, 132f));
+        SetRect(rect, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), anchoredPosition, new Vector2(124f, 124f));
 
         var outerImage = buttonObject.GetComponent<Image>();
         outerImage.sprite = GetControlCircleSprite();
-        outerImage.color = new Color32(96, 96, 96, 255);
+        outerImage.color = new Color32(88, 88, 88, 255);
 
         var button = buttonObject.GetComponent<Button>();
         button.targetGraphic = outerImage;
@@ -322,22 +300,22 @@ public sealed class SnakeUIController : MonoBehaviour
 
         var shadow = buttonObject.AddComponent<Shadow>();
         shadow.effectColor = new Color32(0, 0, 0, 110);
-        shadow.effectDistance = new Vector2(0f, -6f);
+        shadow.effectDistance = new Vector2(0f, -5f);
 
         var innerObject = new GameObject("Inner", typeof(RectTransform), typeof(Image));
         innerObject.transform.SetParent(buttonObject.transform, false);
         var innerRect = innerObject.GetComponent<RectTransform>();
-        SetRect(innerRect, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0f, 0f), new Vector2(112f, 112f));
+        SetRect(innerRect, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(104f, 104f));
 
         var innerImage = innerObject.GetComponent<Image>();
         innerImage.sprite = GetControlCircleSprite();
-        innerImage.color = new Color32(244, 197, 26, 255);
+        innerImage.color = new Color32(247, 204, 28, 255);
         innerImage.raycastTarget = false;
 
         var shineOneObject = new GameObject("ShineOne", typeof(RectTransform), typeof(Image));
         shineOneObject.transform.SetParent(innerObject.transform, false);
         var shineOneRect = shineOneObject.GetComponent<RectTransform>();
-        SetRect(shineOneRect, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(-22f, 20f), new Vector2(34f, 24f));
+        SetRect(shineOneRect, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(-20f, 18f), new Vector2(32f, 22f));
 
         var shineOneImage = shineOneObject.GetComponent<Image>();
         shineOneImage.sprite = GetControlCircleSprite();
@@ -347,7 +325,7 @@ public sealed class SnakeUIController : MonoBehaviour
         var shineTwoObject = new GameObject("ShineTwo", typeof(RectTransform), typeof(Image));
         shineTwoObject.transform.SetParent(innerObject.transform, false);
         var shineTwoRect = shineTwoObject.GetComponent<RectTransform>();
-        SetRect(shineTwoRect, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(-6f, 28f), new Vector2(16f, 12f));
+        SetRect(shineTwoRect, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(-4f, 26f), new Vector2(14f, 10f));
 
         var shineTwoImage = shineTwoObject.GetComponent<Image>();
         shineTwoImage.sprite = GetControlCircleSprite();
@@ -357,12 +335,12 @@ public sealed class SnakeUIController : MonoBehaviour
         button.onClick.AddListener(onClick);
         AddPointerDownListener(buttonObject, onClick);
 
-        Text directionLabel = CreateText(name + "Label", parent, 28, TextAnchor.MiddleCenter);
+        Text directionLabel = CreateText(name + "Label", parent, 24, TextAnchor.MiddleCenter);
         directionLabel.text = label;
-        directionLabel.color = new Color32(175, 175, 175, 255);
+        directionLabel.color = new Color32(206, 206, 206, 255);
 
-        Vector2 labelOffset = label == "UP" ? new Vector2(0f, 94f) : new Vector2(0f, -96f);
-        SetRect(directionLabel.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), anchoredPosition + labelOffset, new Vector2(170f, 40f));
+        Vector2 labelOffset = label == "UP" ? new Vector2(0f, 88f) : new Vector2(0f, -86f);
+        SetRect(directionLabel.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), anchoredPosition + labelOffset, new Vector2(150f, 34f));
     }
 
     private static void AddPointerDownListener(GameObject buttonObject, UnityEngine.Events.UnityAction onPress)
@@ -488,4 +466,3 @@ public sealed class SnakeUIController : MonoBehaviour
         rect.sizeDelta = size;
     }
 }
-
