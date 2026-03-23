@@ -44,6 +44,8 @@ public sealed class SnakeGameController : MonoBehaviour
     private const float HeartRespawnDelay = 20f;
     private const float HeartShieldDuration = 5f;
     private const float HeartBlinkInterval = 0.5f;
+    private const float FieldShakeDuration = 0.12f;
+    private const float FieldShakeAmplitude = 0.10f;
 
     private const float GameplayViewportBottom = 0.24f;
     private const float GameplayViewportHeight = 0.62f;
@@ -120,6 +122,8 @@ public sealed class SnakeGameController : MonoBehaviour
     private float heartBlinkTimer;
     private bool isHeartActiveOnField;
     private bool isSnakeVisible = true;
+    private float fieldShakeRemaining;
+    private Vector3 worldBaseLocalPosition;
     private string statusMessage = string.Empty;
 
     public SnakeGameState State => state;
@@ -170,7 +174,7 @@ public sealed class SnakeGameController : MonoBehaviour
     private void Update()
     {
         EnsureCameraViewport();
-
+        UpdateFieldShake(Time.deltaTime);
         if (state == SnakeGameState.Won)
         {
             if (Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.Space))
@@ -293,6 +297,11 @@ public sealed class SnakeGameController : MonoBehaviour
 
         state = SnakeGameState.Playing;
         statusMessage = string.Empty;
+        fieldShakeRemaining = 0f;
+        if (worldRoot != null)
+        {
+            worldRoot.localPosition = worldBaseLocalPosition;
+        }
 
         currentDirection = Vector2Int.up;
         queuedDirection = Vector2Int.up;
@@ -824,11 +833,21 @@ public sealed class SnakeGameController : MonoBehaviour
 
         if (IsWallCell(nextHead))
         {
-            if (!IsHeartShieldActive() || !RemoveWallAt(nextHead))
+            if (!IsHeartShieldActive())
             {
+                TriggerFieldShake();
                 LoseLevel("You hit the wall");
                 return;
             }
+
+            if (!RemoveWallAt(nextHead))
+            {
+                TriggerFieldShake();
+                LoseLevel("You hit the wall");
+                return;
+            }
+
+            TriggerFieldShake();
         }
 
         bool willCollectHeart = isHeartActiveOnField && nextHead == heartCell;
@@ -943,13 +962,18 @@ public sealed class SnakeGameController : MonoBehaviour
         {
             if (!IsHeartShieldActive())
             {
+                TriggerFieldShake();
                 LoseLevel("You hit the wall");
                 return false;
             }
 
-            RemoveBorderWallAt(nextHead);
+            bool removedEntryWall = RemoveBorderWallAt(nextHead);
             Vector2Int oppositeBorderCell = GetOppositeBorderCell(nextHead, currentDirection);
-            RemoveBorderWallAt(oppositeBorderCell);
+            bool removedOppositeWall = RemoveBorderWallAt(oppositeBorderCell);
+            if (removedEntryWall || removedOppositeWall)
+            {
+                TriggerFieldShake();
+            }
         }
 
         if (!borderWallCells.Contains(nextHead))
@@ -1261,6 +1285,7 @@ public sealed class SnakeGameController : MonoBehaviour
     {
         worldRoot = new GameObject("World").transform;
         worldRoot.SetParent(transform);
+        worldBaseLocalPosition = worldRoot.localPosition;
 
         wallRoot = new GameObject("Walls").transform;
         wallRoot.SetParent(worldRoot);
@@ -1276,6 +1301,40 @@ public sealed class SnakeGameController : MonoBehaviour
 
         heartRoot = new GameObject("Hearts").transform;
         heartRoot.SetParent(worldRoot);
+    }
+
+    private void TriggerFieldShake()
+    {
+        fieldShakeRemaining = Mathf.Max(fieldShakeRemaining, FieldShakeDuration);
+    }
+
+    private void UpdateFieldShake(float deltaTime)
+    {
+        if (worldRoot == null)
+        {
+            return;
+        }
+
+        if (fieldShakeRemaining <= 0f)
+        {
+            if (worldRoot.localPosition != worldBaseLocalPosition)
+            {
+                worldRoot.localPosition = worldBaseLocalPosition;
+            }
+
+            return;
+        }
+
+        fieldShakeRemaining = Mathf.Max(0f, fieldShakeRemaining - deltaTime);
+        float normalized = FieldShakeDuration > 0f ? fieldShakeRemaining / FieldShakeDuration : 0f;
+        float damping = normalized * normalized;
+        Vector2 offset = UnityEngine.Random.insideUnitCircle * (FieldShakeAmplitude * damping);
+        worldRoot.localPosition = worldBaseLocalPosition + new Vector3(offset.x, offset.y, 0f);
+
+        if (fieldShakeRemaining <= 0f)
+        {
+            worldRoot.localPosition = worldBaseLocalPosition;
+        }
     }
 
     private void BuildWalls()
