@@ -7,6 +7,7 @@ public sealed class SnakeUIController : MonoBehaviour
 {
     private static SnakeUIController instance;
     private static Sprite controlCircleSprite;
+    private const float DirectionButtonScale = 1.2f;
 
     private SnakeGameController gameController;
     private Font uiFont;
@@ -281,7 +282,7 @@ public sealed class SnakeUIController : MonoBehaviour
         buttonObject.transform.SetParent(parent, false);
 
         var rect = buttonObject.GetComponent<RectTransform>();
-        SetRect(rect, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), anchoredPosition, new Vector2(124f, 124f));
+        SetRect(rect, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), anchoredPosition, new Vector2(124f, 124f) * DirectionButtonScale);
 
         var outerImage = buttonObject.GetComponent<Image>();
         outerImage.sprite = GetControlCircleSprite();
@@ -305,7 +306,7 @@ public sealed class SnakeUIController : MonoBehaviour
         var innerObject = new GameObject("Inner", typeof(RectTransform), typeof(Image));
         innerObject.transform.SetParent(buttonObject.transform, false);
         var innerRect = innerObject.GetComponent<RectTransform>();
-        SetRect(innerRect, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(104f, 104f));
+        SetRect(innerRect, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(104f, 104f) * DirectionButtonScale);
 
         var innerImage = innerObject.GetComponent<Image>();
         innerImage.sprite = GetControlCircleSprite();
@@ -315,7 +316,7 @@ public sealed class SnakeUIController : MonoBehaviour
         var shineOneObject = new GameObject("ShineOne", typeof(RectTransform), typeof(Image));
         shineOneObject.transform.SetParent(innerObject.transform, false);
         var shineOneRect = shineOneObject.GetComponent<RectTransform>();
-        SetRect(shineOneRect, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(-20f, 18f), new Vector2(32f, 22f));
+        SetRect(shineOneRect, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(-20f, 18f) * DirectionButtonScale, new Vector2(32f, 22f) * DirectionButtonScale);
 
         var shineOneImage = shineOneObject.GetComponent<Image>();
         shineOneImage.sprite = GetControlCircleSprite();
@@ -325,7 +326,7 @@ public sealed class SnakeUIController : MonoBehaviour
         var shineTwoObject = new GameObject("ShineTwo", typeof(RectTransform), typeof(Image));
         shineTwoObject.transform.SetParent(innerObject.transform, false);
         var shineTwoRect = shineTwoObject.GetComponent<RectTransform>();
-        SetRect(shineTwoRect, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(-4f, 26f), new Vector2(14f, 10f));
+        SetRect(shineTwoRect, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(-4f, 26f) * DirectionButtonScale, new Vector2(14f, 10f) * DirectionButtonScale);
 
         var shineTwoImage = shineTwoObject.GetComponent<Image>();
         shineTwoImage.sprite = GetControlCircleSprite();
