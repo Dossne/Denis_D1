@@ -26,13 +26,15 @@ public sealed class SnakeGameController : MonoBehaviour
     private const float GameplayViewportBottom = 0.24f;
     private const float GameplayViewportHeight = 0.62f;
     private const float GameplayViewportTargetAspect = 0.58f;
+    private const string SnakeHeadEmoji = "\uD83D\uDC0D";
+    private const string SnakeBodyEmoji = "\uD83D\uDFE9";
 
     private static Sprite pixelSprite;
     private static Sprite wallFallbackSprite;
     private static Sprite appleFallbackSprite;
 
     private readonly List<Vector2Int> snakeSegments = new List<Vector2Int>();
-    private readonly List<SpriteRenderer> snakeRenderers = new List<SpriteRenderer>();
+    private readonly List<SnakeSegmentView> snakeViews = new List<SnakeSegmentView>();
     private readonly Dictionary<Vector2Int, GameObject> appleObjects = new Dictionary<Vector2Int, GameObject>();
     private readonly List<GameObject> wallObjects = new List<GameObject>();
 
@@ -68,6 +70,13 @@ public sealed class SnakeGameController : MonoBehaviour
     public float TimeRemaining => Mathf.Max(0f, timeRemaining);
     public string StatusMessage => statusMessage;
     public Rect GameplayViewport => gameplayViewport;
+    private sealed class SnakeSegmentView
+    {
+        public GameObject Root;
+        public SpriteRenderer FallbackRenderer;
+        public TextMesh EmojiText;
+        public MeshRenderer EmojiRenderer;
+    }
 
     private void Awake()
     {
@@ -733,45 +742,99 @@ public sealed class SnakeGameController : MonoBehaviour
 
     private void SyncSnakeRenderers()
     {
-        while (snakeRenderers.Count < snakeSegments.Count)
+        while (snakeViews.Count < snakeSegments.Count)
         {
-            var renderer = CreateBlockRenderer(snakeRoot, "SnakeSegment", new Color32(126, 211, 33, 255), 10);
-            snakeRenderers.Add(renderer);
+            snakeViews.Add(CreateSnakeSegmentView(snakeRoot));
         }
 
-        while (snakeRenderers.Count > snakeSegments.Count)
+        while (snakeViews.Count > snakeSegments.Count)
         {
-            int lastIndex = snakeRenderers.Count - 1;
-            var renderer = snakeRenderers[lastIndex];
-            snakeRenderers.RemoveAt(lastIndex);
+            int lastIndex = snakeViews.Count - 1;
+            SnakeSegmentView view = snakeViews[lastIndex];
+            snakeViews.RemoveAt(lastIndex);
 
-            if (renderer != null)
+            if (view != null && view.Root != null)
             {
-                Destroy(renderer.gameObject);
+                Destroy(view.Root);
             }
         }
 
         for (int i = 0; i < snakeSegments.Count; i++)
         {
-            var renderer = snakeRenderers[i];
-            renderer.transform.localPosition = new Vector3(snakeSegments[i].x, snakeSegments[i].y, 0f);
-            renderer.color = i == 0 ? new Color32(155, 232, 75, 255) : new Color32(126, 211, 33, 255);
+            SnakeSegmentView view = snakeViews[i];
+            if (view == null || view.Root == null)
+            {
+                continue;
+            }
+
+            view.Root.transform.localPosition = new Vector3(snakeSegments[i].x, snakeSegments[i].y, 0f);
+
+            bool isHead = i == 0;
+            if (view.FallbackRenderer != null)
+            {
+                view.FallbackRenderer.color = isHead ? new Color32(155, 232, 75, 255) : new Color32(126, 211, 33, 255);
+            }
+
+            if (view.EmojiText != null)
+            {
+                view.EmojiText.text = isHead ? SnakeHeadEmoji : SnakeBodyEmoji;
+            }
+
+            if (view.EmojiRenderer != null)
+            {
+                view.EmojiRenderer.sortingOrder = isHead ? 12 : 11;
+            }
         }
     }
 
-    private SpriteRenderer CreateBlockRenderer(Transform parent, string baseName, Color color, int sortingOrder)
+    private SnakeSegmentView CreateSnakeSegmentView(Transform parent)
     {
-        var block = new GameObject(baseName);
-        block.transform.SetParent(parent, false);
+        var segmentObject = new GameObject("SnakeSegment");
+        segmentObject.transform.SetParent(parent, false);
 
-        var renderer = block.AddComponent<SpriteRenderer>();
-        renderer.sprite = GetPixelSprite();
-        renderer.color = color;
-        renderer.sortingOrder = sortingOrder;
+        var fallbackRenderer = segmentObject.AddComponent<SpriteRenderer>();
+        fallbackRenderer.sprite = GetPixelSprite();
+        fallbackRenderer.color = new Color32(126, 211, 33, 255);
+        fallbackRenderer.sortingOrder = 10;
 
-        return renderer;
+        var emojiObject = new GameObject("Emoji");
+        emojiObject.transform.SetParent(segmentObject.transform, false);
+        emojiObject.transform.localPosition = new Vector3(0f, 0f, -0.05f);
+
+        var textMesh = emojiObject.AddComponent<TextMesh>();
+        textMesh.text = SnakeBodyEmoji;
+        textMesh.anchor = TextAnchor.MiddleCenter;
+        textMesh.alignment = TextAlignment.Center;
+        textMesh.characterSize = 0.23f;
+        textMesh.fontSize = 96;
+        textMesh.color = Color.white;
+        textMesh.richText = false;
+
+        Font emojiFont = GetWallEmojiFont();
+        if (emojiFont != null)
+        {
+            textMesh.font = emojiFont;
+        }
+
+        MeshRenderer emojiRenderer = emojiObject.GetComponent<MeshRenderer>();
+        if (emojiRenderer != null)
+        {
+            if (emojiFont != null)
+            {
+                emojiRenderer.material = emojiFont.material;
+            }
+
+            emojiRenderer.sortingOrder = 11;
+        }
+
+        return new SnakeSegmentView
+        {
+            Root = segmentObject,
+            FallbackRenderer = fallbackRenderer,
+            EmojiText = textMesh,
+            EmojiRenderer = emojiRenderer
+        };
     }
-
     private static Sprite GetPixelSprite()
     {
         if (pixelSprite != null)
