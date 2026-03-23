@@ -334,7 +334,7 @@ public sealed class SnakeUIController : MonoBehaviour
         shineTwoImage.raycastTarget = false;
 
         button.onClick.AddListener(onClick);
-        AddPointerDownListener(buttonObject, onClick);
+        AddDirectionPointerListeners(buttonObject, onClick);
 
         Text directionLabel = CreateText(name + "Label", parent, 24, TextAnchor.MiddleCenter);
         directionLabel.text = label;
@@ -344,7 +344,7 @@ public sealed class SnakeUIController : MonoBehaviour
         SetRect(directionLabel.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), anchoredPosition + labelOffset, new Vector2(150f, 34f));
     }
 
-    private static void AddPointerDownListener(GameObject buttonObject, UnityEngine.Events.UnityAction onPress)
+    private void AddDirectionPointerListeners(GameObject buttonObject, UnityEngine.Events.UnityAction onPress)
     {
         var eventTrigger = buttonObject.AddComponent<EventTrigger>();
         if (eventTrigger.triggers == null)
@@ -353,8 +353,20 @@ public sealed class SnakeUIController : MonoBehaviour
         }
 
         var pointerDownEntry = new EventTrigger.Entry { eventID = EventTriggerType.PointerDown };
-        pointerDownEntry.callback.AddListener(_ => onPress.Invoke());
+        pointerDownEntry.callback.AddListener(_ =>
+        {
+            onPress.Invoke();
+            gameController.NotifyUiDirectionPressed();
+        });
         eventTrigger.triggers.Add(pointerDownEntry);
+
+        var pointerUpEntry = new EventTrigger.Entry { eventID = EventTriggerType.PointerUp };
+        pointerUpEntry.callback.AddListener(_ => gameController.NotifyUiDirectionReleased());
+        eventTrigger.triggers.Add(pointerUpEntry);
+
+        var pointerExitEntry = new EventTrigger.Entry { eventID = EventTriggerType.PointerExit };
+        pointerExitEntry.callback.AddListener(_ => gameController.NotifyUiDirectionReleased());
+        eventTrigger.triggers.Add(pointerExitEntry);
     }
 
     private static Sprite GetControlCircleSprite()

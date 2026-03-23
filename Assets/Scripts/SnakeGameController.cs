@@ -29,6 +29,7 @@ public sealed class SnakeGameController : MonoBehaviour
     private const float BaseMoveInterval = 0.22f;
     private const float MinMoveInterval = 0.08f;
     private const float SpeedUpFactor = 0.96f;
+    private const float HoldBoostSpeedMultiplier = 1.5f;
     private const float MaxInteriorWallCoverage = 0.20f;
     private const int MinInteriorWallLength = 2;
     private const int MaxInteriorWallLength = 7;
@@ -88,6 +89,7 @@ public sealed class SnakeGameController : MonoBehaviour
     private SnakeGameState state;
     private int currentLevel;
     private int applesTarget;
+    private float baseMoveInterval;
     private float moveInterval;
     private float moveTimer;
     private float timeRemaining;
@@ -96,6 +98,10 @@ public sealed class SnakeGameController : MonoBehaviour
     private float bugMoveSpeed;
     private int snakeColorIndex;
     private Color32 currentSnakeColor = new Color32(126, 211, 33, 255);
+    private int uiHeldDirectionsCount;
+    private bool isKeyboardDirectionHeld;
+    private bool isBoostActive;
+    private float boostSourceMoveInterval;
     private string statusMessage = string.Empty;
 
     public SnakeGameState State => state;
@@ -220,6 +226,23 @@ public sealed class SnakeGameController : MonoBehaviour
         QueueDirection(Vector2Int.right);
     }
 
+    public void NotifyUiDirectionPressed()
+    {
+        if (state != SnakeGameState.Playing)
+        {
+            return;
+        }
+
+        uiHeldDirectionsCount++;
+        RegisterDirectionPressForBoost();
+    }
+
+    public void NotifyUiDirectionReleased()
+    {
+        uiHeldDirectionsCount = Mathf.Max(0, uiHeldDirectionsCount - 1);
+        UpdateDirectionBoostState();
+    }
+
     public void StartNextLevel()
     {
         if (state != SnakeGameState.Won)
@@ -246,7 +269,8 @@ public sealed class SnakeGameController : MonoBehaviour
         applesTarget = CalculateApplesCount(currentLevel);
         timeRemaining = CalculateTimeLimit(applesTarget);
 
-        moveInterval = Mathf.Max(MinMoveInterval, BaseMoveInterval - (currentLevel - 1) * 0.005f);
+        baseMoveInterval = Mathf.Max(MinMoveInterval, BaseMoveInterval - (currentLevel - 1) * 0.005f);
+        moveInterval = baseMoveInterval;
         moveTimer = moveInterval;
 
         state = SnakeGameState.Playing;
@@ -254,13 +278,14 @@ public sealed class SnakeGameController : MonoBehaviour
 
         currentDirection = Vector2Int.up;
         queuedDirection = Vector2Int.up;
+        ResetDirectionBoostState();
 
         ResetSnakeColor();
         ResetSnake();
         ClearInteriorWalls();
         GenerateInteriorWalls(currentLevel);
         SpawnApples(applesTarget);
-        InitializeBugSystem(currentLevel, moveInterval);
+        InitializeBugSystem(currentLevel, baseMoveInterval);
     }
 
     private void InitializeBugSystem(int level, float levelStartMoveInterval)
@@ -604,17 +629,23 @@ public sealed class SnakeGameController : MonoBehaviour
 
         appleObjects.Remove(appleCell);
         AdvanceSnakeColor();
-        moveInterval = Mathf.Max(MinMoveInterval, moveInterval * SpeedUpFactor);
+        baseMoveInterval = Mathf.Max(MinMoveInterval, baseMoveInterval * SpeedUpFactor);
+        if (!isBoostActive)
+        {
+            moveInterval = baseMoveInterval;
+        }
     }
 
     private void WinLevel()
     {
+        ResetDirectionBoostState();
         state = SnakeGameState.Won;
         statusMessage = "Level complete";
     }
 
     private void LoseLevel(string reason)
     {
+        ResetDirectionBoostState();
         state = SnakeGameState.Lost;
         statusMessage = reason;
     }
@@ -629,28 +660,35 @@ public sealed class SnakeGameController : MonoBehaviour
     }
     private void HandleKeyboardInput()
     {
+        bool directionPressedThisFrame = false;
+
         if (Input.GetKeyDown(KeyCode.W) || Input.GetKeyDown(KeyCode.UpArrow))
         {
             QueueDirection(Vector2Int.up);
-            return;
+            directionPressedThisFrame = true;
         }
-
-        if (Input.GetKeyDown(KeyCode.S) || Input.GetKeyDown(KeyCode.DownArrow))
+        else if (Input.GetKeyDown(KeyCode.S) || Input.GetKeyDown(KeyCode.DownArrow))
         {
             QueueDirection(Vector2Int.down);
-            return;
+            directionPressedThisFrame = true;
         }
-
-        if (Input.GetKeyDown(KeyCode.A) || Input.GetKeyDown(KeyCode.LeftArrow))
+        else if (Input.GetKeyDown(KeyCode.A) || Input.GetKeyDown(KeyCode.LeftArrow))
         {
             QueueDirection(Vector2Int.left);
-            return;
+            directionPressedThisFrame = true;
         }
-
-        if (Input.GetKeyDown(KeyCode.D) || Input.GetKeyDown(KeyCode.RightArrow))
+        else if (Input.GetKeyDown(KeyCode.D) || Input.GetKeyDown(KeyCode.RightArrow))
         {
             QueueDirection(Vector2Int.right);
+            directionPressedThisFrame = true;
         }
+
+        if (directionPressedThisFrame)
+        {
+            RegisterDirectionPressForBoost();
+        }
+
+        UpdateDirectionBoostState();
     }
 
     private void QueueDirection(Vector2Int direction)
@@ -666,6 +704,61 @@ public sealed class SnakeGameController : MonoBehaviour
         }
 
         queuedDirection = direction;
+    }
+
+    private void RegisterDirectionPressForBoost()
+    {
+        if (state != SnakeGameState.Playing)
+        {
+            return;
+        }
+
+        boostSourceMoveInterval = baseMoveInterval;
+        isBoostActive = true;
+        moveInterval = boostSourceMoveInterval / HoldBoostSpeedMultiplier;
+    }
+
+    private void UpdateDirectionBoostState()
+    {
+        isKeyboardDirectionHeld = IsAnyKeyboardDirectionHeld();
+        bool anyDirectionHeld = uiHeldDirectionsCount > 0 || isKeyboardDirectionHeld;
+
+        if (anyDirectionHeld)
+        {
+            if (!isBoostActive)
+            {
+                RegisterDirectionPressForBoost();
+            }
+
+            return;
+        }
+
+        if (isBoostActive)
+        {
+            isBoostActive = false;
+            moveInterval = baseMoveInterval;
+        }
+    }
+
+    private static bool IsAnyKeyboardDirectionHeld()
+    {
+        return Input.GetKey(KeyCode.W)
+            || Input.GetKey(KeyCode.UpArrow)
+            || Input.GetKey(KeyCode.S)
+            || Input.GetKey(KeyCode.DownArrow)
+            || Input.GetKey(KeyCode.A)
+            || Input.GetKey(KeyCode.LeftArrow)
+            || Input.GetKey(KeyCode.D)
+            || Input.GetKey(KeyCode.RightArrow);
+    }
+
+    private void ResetDirectionBoostState()
+    {
+        uiHeldDirectionsCount = 0;
+        isKeyboardDirectionHeld = false;
+        isBoostActive = false;
+        boostSourceMoveInterval = 0f;
+        moveInterval = baseMoveInterval;
     }
 
     private void ConfigureCamera()
