@@ -26,12 +26,12 @@ public sealed class SnakeGameController : MonoBehaviour
     private const float GameplayViewportBottom = 0.24f;
     private const float GameplayViewportHeight = 0.62f;
     private const float GameplayViewportTargetAspect = 0.58f;
-    private const string SnakeHeadEmoji = "\uD83D\uDC0D";
     private const string SnakeBodyEmoji = "\uD83D\uDFE9";
 
     private static Sprite wallFallbackSprite;
     private static Sprite appleFallbackSprite;
-    private static Sprite snakeHeadFallbackSprite;
+    private static Sprite snakeHeadOpenFallbackSprite;
+    private static Sprite snakeHeadClosedFallbackSprite;
     private static Sprite snakeBodyFallbackSprite;
 
     private readonly List<Vector2Int> snakeSegments = new List<Vector2Int>();
@@ -114,6 +114,7 @@ public sealed class SnakeGameController : MonoBehaviour
                 StartNextLevel();
             }
 
+            UpdateSnakeHeadVisual();
             return;
         }
 
@@ -124,6 +125,7 @@ public sealed class SnakeGameController : MonoBehaviour
                 RestartLevel();
             }
 
+            UpdateSnakeHeadVisual();
             return;
         }
 
@@ -133,6 +135,7 @@ public sealed class SnakeGameController : MonoBehaviour
         if (timeRemaining <= 0f)
         {
             LoseLevel("Time is up");
+            UpdateSnakeHeadVisual();
             return;
         }
 
@@ -147,8 +150,9 @@ public sealed class SnakeGameController : MonoBehaviour
                 break;
             }
         }
-    }
 
+        UpdateSnakeHeadVisual();
+    }
     public void QueueUp()
     {
         QueueDirection(Vector2Int.up);
@@ -760,6 +764,8 @@ public sealed class SnakeGameController : MonoBehaviour
             }
         }
 
+        bool mouthOpen = IsHeadMouthOpen();
+
         for (int i = 0; i < snakeSegments.Count; i++)
         {
             SnakeSegmentView view = snakeViews[i];
@@ -770,25 +776,95 @@ public sealed class SnakeGameController : MonoBehaviour
 
             bool isHead = i == 0;
             view.Root.transform.localPosition = new Vector3(snakeSegments[i].x, snakeSegments[i].y, 0f);
+            view.Root.transform.localRotation = isHead
+                ? Quaternion.Euler(0f, 0f, GetDirectionRotation(currentDirection))
+                : Quaternion.identity;
 
             if (view.FallbackRenderer != null)
             {
-                view.FallbackRenderer.sprite = isHead ? GetSnakeHeadFallbackSprite() : GetSnakeBodyFallbackSprite();
+                view.FallbackRenderer.sprite = isHead
+                    ? GetSnakeHeadFallbackSprite(mouthOpen)
+                    : GetSnakeBodyFallbackSprite();
                 view.FallbackRenderer.color = Color.white;
             }
 
             if (view.EmojiText != null)
             {
-                view.EmojiText.text = isHead ? SnakeHeadEmoji : SnakeBodyEmoji;
+                view.EmojiText.text = isHead ? string.Empty : SnakeBodyEmoji;
             }
 
             if (view.EmojiRenderer != null)
             {
-                view.EmojiRenderer.sortingOrder = isHead ? 12 : 11;
+                view.EmojiRenderer.enabled = !isHead;
+                view.EmojiRenderer.sortingOrder = 11;
             }
         }
     }
 
+    private void UpdateSnakeHeadVisual()
+    {
+        if (snakeViews.Count == 0)
+        {
+            return;
+        }
+
+        SnakeSegmentView headView = snakeViews[0];
+        if (headView == null || headView.Root == null)
+        {
+            return;
+        }
+
+        bool mouthOpen = IsHeadMouthOpen();
+
+        headView.Root.transform.localRotation = Quaternion.Euler(0f, 0f, GetDirectionRotation(currentDirection));
+
+        if (headView.FallbackRenderer != null)
+        {
+            headView.FallbackRenderer.sprite = GetSnakeHeadFallbackSprite(mouthOpen);
+            headView.FallbackRenderer.color = Color.white;
+        }
+
+        if (headView.EmojiText != null)
+        {
+            headView.EmojiText.text = string.Empty;
+        }
+
+        if (headView.EmojiRenderer != null)
+        {
+            headView.EmojiRenderer.enabled = false;
+        }
+    }
+
+    private bool IsHeadMouthOpen()
+    {
+        if (state != SnakeGameState.Playing || moveInterval <= 0.0001f)
+        {
+            return false;
+        }
+
+        float phase = Mathf.Clamp01(1f - (moveTimer / moveInterval));
+        return phase < 0.55f;
+    }
+
+    private static float GetDirectionRotation(Vector2Int direction)
+    {
+        if (direction == Vector2Int.right)
+        {
+            return -90f;
+        }
+
+        if (direction == Vector2Int.down)
+        {
+            return 180f;
+        }
+
+        if (direction == Vector2Int.left)
+        {
+            return 90f;
+        }
+
+        return 0f;
+    }
     private SnakeSegmentView CreateSnakeSegmentView(Transform parent)
     {
         var segmentObject = new GameObject("SnakeSegment");
@@ -837,15 +913,24 @@ public sealed class SnakeGameController : MonoBehaviour
             EmojiRenderer = emojiRenderer
         };
     }
-    private static Sprite GetSnakeHeadFallbackSprite()
+    private static Sprite GetSnakeHeadFallbackSprite(bool mouthOpen)
     {
-        if (snakeHeadFallbackSprite != null)
+        if (mouthOpen)
         {
-            return snakeHeadFallbackSprite;
+            if (snakeHeadOpenFallbackSprite == null)
+            {
+                snakeHeadOpenFallbackSprite = CreateSnakeFallbackSprite(true, true);
+            }
+
+            return snakeHeadOpenFallbackSprite;
         }
 
-        snakeHeadFallbackSprite = CreateSnakeFallbackSprite(true);
-        return snakeHeadFallbackSprite;
+        if (snakeHeadClosedFallbackSprite == null)
+        {
+            snakeHeadClosedFallbackSprite = CreateSnakeFallbackSprite(true, false);
+        }
+
+        return snakeHeadClosedFallbackSprite;
     }
 
     private static Sprite GetSnakeBodyFallbackSprite()
@@ -855,11 +940,11 @@ public sealed class SnakeGameController : MonoBehaviour
             return snakeBodyFallbackSprite;
         }
 
-        snakeBodyFallbackSprite = CreateSnakeFallbackSprite(false);
+        snakeBodyFallbackSprite = CreateSnakeFallbackSprite(false, false);
         return snakeBodyFallbackSprite;
     }
 
-    private static Sprite CreateSnakeFallbackSprite(bool isHead)
+    private static Sprite CreateSnakeFallbackSprite(bool isHead, bool mouthOpen)
     {
         const int textureSize = 16;
 
@@ -871,9 +956,9 @@ public sealed class SnakeGameController : MonoBehaviour
         var mainColor = new Color32(126, 211, 33, 255);
         var shadeColor = new Color32(92, 163, 24, 255);
         var highlightColor = new Color32(163, 234, 85, 255);
+        var mouthColor = new Color32(52, 34, 30, 255);
         var eyeWhite = new Color32(244, 249, 252, 255);
         var eyePupil = new Color32(28, 36, 46, 255);
-        var tongueColor = new Color32(233, 88, 111, 255);
 
         var pixels = new Color32[textureSize * textureSize];
         for (int i = 0; i < pixels.Length; i++)
@@ -885,8 +970,8 @@ public sealed class SnakeGameController : MonoBehaviour
         {
             for (int x = 1; x <= 14; x++)
             {
-                float dx = (x - 7.5f) / 6.6f;
-                float dy = (y - 7.5f) / 6.6f;
+                float dx = (x - 7.5f) / 6.5f;
+                float dy = (y - 7.5f) / 6.5f;
                 if (dx * dx + dy * dy > 1f)
                 {
                     continue;
@@ -904,17 +989,54 @@ public sealed class SnakeGameController : MonoBehaviour
 
         if (isHead)
         {
-            pixels[10 * textureSize + 5] = eyeWhite;
-            pixels[10 * textureSize + 10] = eyeWhite;
-            pixels[10 * textureSize + 6] = eyePupil;
-            pixels[10 * textureSize + 9] = eyePupil;
-            pixels[4 * textureSize + 7] = tongueColor;
-            pixels[3 * textureSize + 6] = tongueColor;
-            pixels[3 * textureSize + 8] = tongueColor;
+            if (mouthOpen)
+            {
+                for (int y = 9; y <= 15; y++)
+                {
+                    int halfWidth = y - 8;
+                    for (int x = 7 - halfWidth; x <= 8 + halfWidth; x++)
+                    {
+                        if (x < 0 || x >= textureSize)
+                        {
+                            continue;
+                        }
+
+                        pixels[y * textureSize + x] = transparent;
+                    }
+                }
+            }
+            else
+            {
+                for (int x = 5; x <= 10; x++)
+                {
+                    pixels[11 * textureSize + x] = mouthColor;
+                }
+
+                pixels[10 * textureSize + 7] = mouthColor;
+                pixels[10 * textureSize + 8] = mouthColor;
+            }
+
+            for (int y = 7; y <= 8; y++)
+            {
+                for (int x = 4; x <= 5; x++)
+                {
+                    pixels[y * textureSize + x] = eyeWhite;
+                }
+
+                for (int x = 10; x <= 11; x++)
+                {
+                    pixels[y * textureSize + x] = eyeWhite;
+                }
+            }
+
+            pixels[7 * textureSize + 5] = eyePupil;
+            pixels[8 * textureSize + 5] = eyePupil;
+            pixels[7 * textureSize + 10] = eyePupil;
+            pixels[8 * textureSize + 10] = eyePupil;
         }
         else
         {
-            for (int x = 5; x <= 10; x++)
+            for (int x = 4; x <= 11; x++)
             {
                 pixels[7 * textureSize + x] = highlightColor;
             }
@@ -926,4 +1048,3 @@ public sealed class SnakeGameController : MonoBehaviour
         return Sprite.Create(texture, new Rect(0f, 0f, textureSize, textureSize), new Vector2(0.5f, 0.5f), textureSize);
     }
 }
-
