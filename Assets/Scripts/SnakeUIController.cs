@@ -21,6 +21,8 @@ public sealed class SnakeUIController : MonoBehaviour
 
     private SnakeGameState lastState = (SnakeGameState)(-1);
     private Rect lastViewport = new Rect(-1f, -1f, -1f, -1f);
+    private string lastLevelLine = string.Empty;
+    private string lastTimerLine = string.Empty;
 
     private void Awake()
     {
@@ -155,8 +157,20 @@ public sealed class SnakeUIController : MonoBehaviour
     private void UpdateHud()
     {
         int collectedApples = gameController.ApplesTarget - gameController.ApplesRemaining;
-        levelText.text = string.Format("Level {0}  Apples {1}/{2}", gameController.CurrentLevel, collectedApples, gameController.ApplesTarget);
-        timerText.text = string.Format("Time {0}", Mathf.CeilToInt(gameController.TimeRemaining));
+
+        string levelLine = string.Format("Level {0}  Apples {1}/{2}", gameController.CurrentLevel, collectedApples, gameController.ApplesTarget);
+        if (!string.Equals(lastLevelLine, levelLine))
+        {
+            lastLevelLine = levelLine;
+            levelText.text = levelLine;
+        }
+
+        string timerLine = string.Format("Time {0:D2}", Mathf.Max(0, Mathf.CeilToInt(gameController.TimeRemaining)));
+        if (!string.Equals(lastTimerLine, timerLine))
+        {
+            lastTimerLine = timerLine;
+            timerText.text = timerLine;
+        }
 
         if (gameController.State == SnakeGameState.Playing)
         {
@@ -273,3 +287,4 @@ public sealed class SnakeUIController : MonoBehaviour
         rect.sizeDelta = size;
     }
 }
+

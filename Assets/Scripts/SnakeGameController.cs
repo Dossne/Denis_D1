@@ -10,6 +10,7 @@ public enum SnakeGameState
 
 public sealed class SnakeGameController : MonoBehaviour
 {
+    private static SnakeGameController instance;
     private const int MinX = -10;
     private const int MaxX = 10;
     private const int MinY = -16;
@@ -66,10 +67,26 @@ public sealed class SnakeGameController : MonoBehaviour
 
     private void Awake()
     {
+        if (instance != null && instance != this)
+        {
+            Destroy(gameObject);
+            return;
+        }
+
+        instance = this;
+
         ConfigureCamera();
         CreateRoots();
         BuildWalls();
         BeginLevel(1);
+    }
+
+    private void OnDestroy()
+    {
+        if (instance == this)
+        {
+            instance = null;
+        }
     }
 
     private void Update()
@@ -526,3 +543,4 @@ public sealed class SnakeGameController : MonoBehaviour
         return pixelSprite;
     }
 }
+
