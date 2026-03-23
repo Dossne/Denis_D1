@@ -29,6 +29,7 @@ public sealed class SnakeGameController : MonoBehaviour
 
     private static Sprite pixelSprite;
     private static Sprite wallFallbackSprite;
+    private static Sprite appleFallbackSprite;
 
     private readonly List<Vector2Int> snakeSegments = new List<Vector2Int>();
     private readonly List<SpriteRenderer> snakeRenderers = new List<SpriteRenderer>();
@@ -258,8 +259,8 @@ public sealed class SnakeGameController : MonoBehaviour
         appleObject.transform.localPosition = new Vector3(cell.x, cell.y, 0f);
 
         var fallbackRenderer = appleObject.AddComponent<SpriteRenderer>();
-        fallbackRenderer.sprite = GetPixelSprite();
-        fallbackRenderer.color = new Color32(237, 106, 94, 255);
+        fallbackRenderer.sprite = GetAppleFallbackSprite();
+        fallbackRenderer.color = Color.white;
         fallbackRenderer.sortingOrder = 5;
 
         var emojiObject = new GameObject("Emoji");
@@ -629,6 +630,71 @@ public sealed class SnakeGameController : MonoBehaviour
         return wallEmojiFont;
     }
 
+    private static Sprite GetAppleFallbackSprite()
+    {
+        if (appleFallbackSprite != null)
+        {
+            return appleFallbackSprite;
+        }
+
+        const int textureSize = 16;
+        var texture = new Texture2D(textureSize, textureSize, TextureFormat.RGBA32, false);
+        texture.filterMode = FilterMode.Point;
+        texture.wrapMode = TextureWrapMode.Clamp;
+
+        var transparent = new Color32(0, 0, 0, 0);
+        var bodyColor = new Color32(214, 67, 63, 255);
+        var bodyShade = new Color32(173, 49, 45, 255);
+        var highlight = new Color32(244, 132, 115, 255);
+        var stemColor = new Color32(122, 84, 43, 255);
+        var leafColor = new Color32(98, 171, 79, 255);
+
+        var pixels = new Color32[textureSize * textureSize];
+        for (int i = 0; i < pixels.Length; i++)
+        {
+            pixels[i] = transparent;
+        }
+
+        for (int y = 2; y <= 12; y++)
+        {
+            for (int x = 2; x <= 13; x++)
+            {
+                float dx = (x - 7.5f) / 5.2f;
+                float dy = (y - 7.0f) / 5.0f;
+                if (dx * dx + dy * dy > 1f)
+                {
+                    continue;
+                }
+
+                Color32 color = x <= 7 ? bodyShade : bodyColor;
+                if (x >= 9 && y >= 8 && y <= 11)
+                {
+                    color = highlight;
+                }
+
+                pixels[y * textureSize + x] = color;
+            }
+        }
+
+        pixels[12 * textureSize + 7] = transparent;
+        pixels[12 * textureSize + 8] = transparent;
+
+        pixels[13 * textureSize + 7] = stemColor;
+        pixels[14 * textureSize + 7] = stemColor;
+        pixels[13 * textureSize + 8] = stemColor;
+
+        pixels[13 * textureSize + 9] = leafColor;
+        pixels[14 * textureSize + 10] = leafColor;
+        pixels[14 * textureSize + 11] = leafColor;
+        pixels[15 * textureSize + 10] = leafColor;
+
+        texture.SetPixels32(pixels);
+        texture.Apply();
+
+        appleFallbackSprite = Sprite.Create(texture, new Rect(0f, 0f, textureSize, textureSize), new Vector2(0.5f, 0.5f), textureSize);
+        return appleFallbackSprite;
+    }
+
     private static Sprite GetWallFallbackSprite()
     {
         if (wallFallbackSprite != null)
@@ -664,6 +730,7 @@ public sealed class SnakeGameController : MonoBehaviour
         wallFallbackSprite = Sprite.Create(texture, new Rect(0f, 0f, textureSize, textureSize), new Vector2(0.5f, 0.5f), textureSize);
         return wallFallbackSprite;
     }
+
     private void SyncSnakeRenderers()
     {
         while (snakeRenderers.Count < snakeSegments.Count)
